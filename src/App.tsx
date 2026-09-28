@@ -865,11 +865,7 @@ const REVIEWS: Record<number, ReviewEntry[]> = {
   ],
 };
 
-const TRAVEL_PLANS: TravelPlan[] = [
-  { TravelPlan_ID: 1, Plan_Name: "Palawan Nature Trip",  Start_Date: "2025-12-20", Number_of_Days: 7,  Budget: 45000, Travel_Status: "Planned",   Notes: "Bring waterproof bag. Book island tours in advance.", destination_name: "Big Lagoon",               category_name: "Tourist Destinations" },
-  { TravelPlan_ID: 2, Plan_Name: "Tokyo Discovery",      Start_Date: "2025-11-10", Number_of_Days: 5,  Budget: 80000, Travel_Status: "Planned",   Notes: "Get IC card at airport. Buy Shinkansen pass beforehand.",  destination_name: "Tsukiji Outer Market",      category_name: "Restaurants"          },
-  { TravelPlan_ID: 3, Plan_Name: "Bali Retreat",         Start_Date: "2026-02-14", Number_of_Days: 10, Budget: 60000, Travel_Status: "Planned",   Notes: "Book Locavore 6 weeks out. Rent scooter in Ubud.",     destination_name: "Tegallalang Rice Terraces", category_name: "Tourist Destinations" },
-];
+
 
 // ── Small helpers ─────────────────────────────────────────────────────────────
 
@@ -1172,24 +1168,213 @@ function WriteReviewModal({ dest, catType, onClose, onSubmit }: { dest: Destinat
   );
 }
 
-function SavePlanModal({ dest, onClose }: { dest: Destination; onClose: () => void }) {
-  const cat = CATEGORIES.find((c) => c.Category_ID === (dest.Place_Type_ID ?? dest.Category_ID));
+function SavePlanModal({
+  dest,
+  onClose,
+}: {
+  dest: Destination;
+  onClose: () => void;
+}) {
+  const cat = CATEGORIES.find(
+    (c) => c.Category_ID === (dest.Place_Type_ID ?? dest.Category_ID)
+  );
+
+  const [planName, setPlanName] = useState("");
+  const [startDate, setStartDate] = useState("");
+  const [numberOfDays, setNumberOfDays] = useState("");
+  const [budget, setBudget] = useState("");
+  const [notes, setNotes] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  const handleSave = async () => {
+    if (!planName.trim()) {
+      alert("Please enter a plan name.");
+      return;
+    }
+
+    if (!startDate) {
+      alert("Please select a start date.");
+      return;
+    }
+
+    if (!numberOfDays || Number(numberOfDays) < 1) {
+      alert("Please enter a valid number of days.");
+      return;
+    }
+
+    setSaving(true);
+
+    try {
+      // Get currently logged-in user
+      const {
+        data: { user },
+        error: userError,
+      } = await supabase.auth.getUser();
+
+      if (userError || !user) {
+        throw new Error("You must be logged in to save a travel plan.");
+      }
+
+      // Get the next TravelPlan_ID
+      const { data: existingPlans, error: idError } = await supabase
+        .from("TRAVEL_PLAN")
+        .select("travelplan_id")
+        .order("travelplan_id", { ascending: false })
+        .limit(1);
+
+      if (idError) {
+        throw idError;
+      }
+
+      const nextTravelPlanId =
+        existingPlans && existingPlans.length > 0
+          ? Number(existingPlans[0].travelplan_id) + 1
+          : 1;
+
+      // Save the travel plan
+      const { error: insertError } = await supabase
+        .from("TRAVEL_PLAN")
+        .insert({
+          travelplan_id: nextTravelPlanId,
+          category_id: dest.Category_ID,
+          destination_id: dest.Destination_ID,
+          plan_name: planName.trim(),
+          start_date: startDate,
+          number_of_days: Number(numberOfDays),
+          budget: budget ? Number(budget) : null,
+          travel_status: "Planned",
+          created_date: new Date().toISOString(),
+          notes: notes.trim() || null,
+          user_id: user.id,
+        });
+
+      if (insertError) {
+        throw insertError;
+      }
+
+      alert("Travel plan saved successfully!");
+      onClose();
+    } catch (error: any) {
+      console.error("Error saving travel plan:", error);
+      alert(error.message || "Failed to save travel plan.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
   return (
     <Overlay onClose={onClose}>
       <ModalHeader title="Save to Travel Plan" onClose={onClose} />
+
       <div className="px-6 pb-6 pt-3 space-y-3">
+
+        {/* Destination */}
         <div className="bg-blue-50 rounded-xl p-3 flex gap-3 items-center">
-          <img src={dest.Destination_Image} className="w-12 h-12 rounded-lg object-cover flex-shrink-0" alt={dest.Destination_Name} />
-          <div><div className="font-bold text-[#0b1f5c] text-sm">{dest.Destination_Name}</div><div className="text-xs text-slate-400">{cat?.Category_Name}</div></div>
+          <img
+            src={dest.Destination_Image}
+            className="w-12 h-12 rounded-lg object-cover flex-shrink-0"
+            alt={dest.Destination_Name}
+          />
+
+          <div>
+            <div className="font-bold text-[#0b1f5c] text-sm">
+              {dest.Destination_Name}
+            </div>
+
+            <div className="text-xs text-slate-400">
+              {cat?.Category_Name}
+            </div>
+          </div>
         </div>
-        <Field label="Plan Name" placeholder="e.g. Palawan Nature Trip" />
+
+        {/* Plan Name */}
+        <div>
+          <label className="block text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-1">
+            Plan Name
+          </label>
+
+          <input
+            type="text"
+            value={planName}
+            onChange={(e) => setPlanName(e.target.value)}
+            placeholder="e.g. Palawan Nature Trip"
+            className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-100"
+          />
+        </div>
+
+        {/* Start Date + Number of Days */}
         <div className="grid grid-cols-2 gap-3">
-          <div><label className="block text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-1">Start Date</label><input type="date" className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-100" /></div>
-          <div><label className="block text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-1">No. of Days</label><input type="number" min="1" placeholder="7" className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-100" /></div>
+
+          <div>
+            <label className="block text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-1">
+              Start Date
+            </label>
+
+            <input
+              type="date"
+              value={startDate}
+              onChange={(e) => setStartDate(e.target.value)}
+              className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-100"
+            />
+          </div>
+
+          <div>
+            <label className="block text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-1">
+              No. of Days
+            </label>
+
+            <input
+              type="number"
+              min="1"
+              value={numberOfDays}
+              onChange={(e) => setNumberOfDays(e.target.value)}
+              placeholder="7"
+              className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-100"
+            />
+          </div>
+
         </div>
-        <Field label="Budget" placeholder="e.g. 45000" />
-        <div><label className="block text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-1">Notes</label><textarea rows={2} placeholder="Packing list, reminders…" className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-100 resize-none" /></div>
-        <button className="w-full bg-[#0b1f5c] text-white font-semibold py-3 rounded-xl hover:bg-[#162d7a] text-sm">Save to Plan</button>
+
+        {/* Budget */}
+        <div>
+          <label className="block text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-1">
+            Budget
+          </label>
+
+          <input
+            type="number"
+            min="0"
+            value={budget}
+            onChange={(e) => setBudget(e.target.value)}
+            placeholder="e.g. 45000"
+            className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-100"
+          />
+        </div>
+
+        {/* Notes */}
+        <div>
+          <label className="block text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-1">
+            Notes
+          </label>
+
+          <textarea
+            rows={2}
+            value={notes}
+            onChange={(e) => setNotes(e.target.value)}
+            placeholder="Packing list, reminders…"
+            className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-100 resize-none"
+          />
+        </div>
+
+        {/* Save */}
+        <button
+          onClick={handleSave}
+          disabled={saving}
+          className="w-full bg-[#0b1f5c] text-white font-semibold py-3 rounded-xl hover:bg-[#162d7a] text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          {saving ? "Saving..." : "Save to Plan"}
+        </button>
+
       </div>
     </Overlay>
   );
@@ -1381,6 +1566,7 @@ export default function App() {
   const [filterCity, setFilterCity]       = useState("");
   const [filterCategory, setFilterCategory] = useState("");
   const [liveReviews, setLiveReviews] = useState<Record<number, ReviewEntry[]>>({});
+  const [dbTravelPlans, setDbTravelPlans] = useState<any[]>([]);
   const [isPartner, setIsPartner] = useState(false);
   const [partnerData, setPartnerData] = useState<BusinessPartner | null>(null);
   const [partnerListings, setPartnerListings] = useState<PartnerListing[]>([]);
@@ -1388,6 +1574,82 @@ export default function App() {
   const scrollCities = useCallback((dir: "left" | "right") => {
     if (citiesScrollRef.current) citiesScrollRef.current.scrollBy({ left: dir === "right" ? 760 : -760, behavior: "smooth" });
   }, []);
+
+  const loadTravelPlans = async () => {
+    try {
+      const {
+        data: { user },
+        error: userError,
+      } = await supabase.auth.getUser();
+
+      if (userError || !user) {
+        setDbTravelPlans([]);
+        return;
+      }
+
+      const { data, error } = await supabase
+        .from("TRAVEL_PLAN")
+        .select(`
+          travelplan_id,
+          category_id,
+          destination_id,
+          plan_name,
+          start_date,
+          number_of_days,
+          budget,
+          travel_status,
+          created_date,
+          notes
+        `)
+        .eq("user_id", user.id)
+        .order("travelplan_id", { ascending: false });
+
+      if (error) {
+        console.error("TRAVEL_PLAN query error:", error);
+        setDbTravelPlans([]);
+        return;
+      }
+
+      const plans = data ?? [];
+
+      // Resolve the destination/category names from the data already loaded
+      // from the live database. This keeps the Travel Plans screen connected
+      // to the same DESTINATION data used throughout the app.
+      const { data: categories, error: categoryError } = await supabase
+        .from("CATEGORY")
+        .select("category_id, category_type");
+
+      if (categoryError) {
+        console.error("CATEGORY query error:", categoryError);
+      }
+
+      const categoryMap = new Map(
+        (categories ?? []).map((category: any) => [
+          Number(category.category_id),
+          category.category_type ?? "",
+        ])
+      );
+
+      const enrichedPlans = plans.map((plan: any) => {
+        const destination = dbDestinations.find(
+          (item) => item.Destination_ID === Number(plan.destination_id)
+        );
+
+        return {
+          ...plan,
+          destination_name: destination?.Destination_Name ?? `Destination #${plan.destination_id}`,
+          category_name:
+            categoryMap.get(Number(plan.category_id)) || "",
+        };
+      });
+
+      console.log("TRAVEL_PLAN data:", enrichedPlans);
+      setDbTravelPlans(enrichedPlans);
+    } catch (error) {
+      console.error("Error loading travel plans:", error);
+      setDbTravelPlans([]);
+    }
+  };
 
   const saveReviewToSupabase = async (
   review: ReviewEntry,
@@ -2117,8 +2379,14 @@ useEffect(() => {
   loadData();
 }, []);
 
-  function go(s: Screen) { setScreen(s); window.scrollTo({ top: 0, behavior: "smooth" }); }
+function go(s: Screen) {
+  setScreen(s);
+  window.scrollTo({ top: 0, behavior: "smooth" });
 
+  if (s === "plans") {
+    loadTravelPlans();
+  }
+}
   function pickCountry(c: Country) { setCountry(c); go("cities"); }
 function pickCity(c: City) {
   setCity(c);
@@ -2897,25 +3165,52 @@ const Modals = () => (
         </div>
 
         <div className="space-y-4">
-          {TRAVEL_PLANS.map((p) => (
-            <div key={p.TravelPlan_ID} className="bg-white rounded-2xl border border-slate-100 p-6 flex gap-4 items-start">
-              <div className={`w-1 self-stretch rounded-full flex-shrink-0 ${p.Travel_Status === "Completed" ? "bg-green-400" : p.Travel_Status === "Ongoing" ? "bg-blue-400" : "bg-amber-400"}`} />
-              <div className="flex-1 min-w-0">
-                <div className="flex items-start justify-between gap-4 flex-wrap">
-                  <div>
-                    <h3 className="font-extrabold text-[#0b1f5c] text-lg" style={{ fontFamily: "Outfit, sans-serif" }}>{p.Plan_Name}</h3>
-                    <p className="text-sm text-slate-500 font-medium">{p.destination_name} · {p.category_name}</p>
-                  </div>
-                  <span className={`text-xs font-bold px-3 py-1 rounded-full flex-shrink-0 ${p.Travel_Status === "Completed" ? "bg-green-100 text-green-700" : p.Travel_Status === "Ongoing" ? "bg-blue-100 text-blue-700" : "bg-amber-100 text-amber-700"}`}>{p.Travel_Status}</span>
-                </div>
-                <div className="flex flex-wrap gap-5 mt-2 text-sm text-slate-500">
-                  <span>📅 {p.Start_Date}</span><span>🗓 {p.Number_of_Days} days</span><span>💰 ₱{p.Budget.toLocaleString()}</span>
-                  <span className="font-mono text-xs text-slate-400">TP-{String(p.TravelPlan_ID).padStart(3,"0")}</span>
-                </div>
-                {p.Notes && <p className="mt-1.5 text-xs text-slate-400 italic">📝 {p.Notes}</p>}
-              </div>
+          {dbTravelPlans.length === 0 ? (
+            <div className="bg-white rounded-2xl border border-slate-100 p-8 text-center">
+              <div className="text-4xl mb-3">🗓️</div>
+              <h3 className="font-bold text-[#0b1f5c] text-lg">No Travel Plans Yet</h3>
+              <p className="text-sm text-slate-400 mt-1">
+                Save a destination to create your first travel plan.
+              </p>
             </div>
-          ))}
+          ) : (
+            dbTravelPlans.map((p: any) => (
+              <div key={p.travelplan_id} className="bg-white rounded-2xl border border-slate-100 p-6 flex gap-4 items-start">
+                <div className={`w-1 self-stretch rounded-full flex-shrink-0 ${p.travel_status === "Completed" ? "bg-green-400" : p.travel_status === "Ongoing" ? "bg-blue-400" : "bg-amber-400"}`} />
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-start justify-between gap-4 flex-wrap">
+                    <div>
+                      <h3 className="font-extrabold text-[#0b1f5c] text-lg" style={{ fontFamily: "Outfit, sans-serif" }}>
+                        {p.plan_name}
+                      </h3>
+                      <p className="text-sm text-slate-500 font-medium">
+                        {p.destination_name}
+                        {p.category_name ? ` · ${p.category_name}` : ""}
+                      </p>
+                    </div>
+                    <span className={`text-xs font-bold px-3 py-1 rounded-full flex-shrink-0 ${p.travel_status === "Completed" ? "bg-green-100 text-green-700" : p.travel_status === "Ongoing" ? "bg-blue-100 text-blue-700" : "bg-amber-100 text-amber-700"}`}>
+                      {p.travel_status}
+                    </span>
+                  </div>
+
+                  <div className="flex flex-wrap gap-5 mt-2 text-sm text-slate-500">
+                    <span>📅 {p.start_date}</span>
+                    <span>🗓 {p.number_of_days} days</span>
+                    {p.budget !== null && p.budget !== undefined && (
+                      <span>💰 ₱{Number(p.budget).toLocaleString()}</span>
+                    )}
+                    <span className="font-mono text-xs text-slate-400">
+                      TP-{String(p.travelplan_id).padStart(3, "0")}
+                    </span>
+                  </div>
+
+                  {p.notes && (
+                    <p className="mt-1.5 text-xs text-slate-400 italic">📝 {p.notes}</p>
+                  )}
+                </div>
+              </div>
+            ))
+          )}
         </div>
 
         <button onClick={() => go("countries")} className="mt-8 w-full border-2 border-dashed border-blue-200 text-blue-500 font-semibold py-4 rounded-2xl hover:bg-blue-50 transition-all text-sm">
