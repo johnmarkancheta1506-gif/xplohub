@@ -1,3 +1,87 @@
+/**
+ * ============================================================================
+ * TRAVELMATE — APPLICATION NOTES / DEVELOPMENT LOG
+ * ============================================================================
+ *
+ * This App.tsx is the current Supabase-connected version of the TravelMate UI.
+ *
+ * WORK COMPLETED IN TODAY'S SESSION
+ * ---------------------------------
+ * 1. SEARCH HISTORY
+ *    - Connected the Search History feature to the live MAIN Supabase database.
+ *    - Added loading of the logged-in user's search history from SEARCH_HISTORY.
+ *    - Added saving of searches when the user performs a search/filter action.
+ *    - Search history is tied to the authenticated user's user_id, so users only
+ *      see their own saved searches.
+ *    - Keyword searches can resolve locations such as Baguio and Vigan.
+ *    - Country, city, and category selections can be saved as search history.
+ *    - Added the search_category field so the UI category (Restaurant,
+ *      Accommodation, Convenience Store, Landmark, Tourist Destination) can be
+ *      stored separately from the database's thematic CATEGORY records.
+ *    - Added a Search History modal that displays previous searches and their
+ *      location/category information.
+ *    - Fixed the modal layout so it is rendered outside the fixed navbar and
+ *      appears correctly as a full-screen overlay.
+ *    - Added/used RLS policies so authenticated users can read and insert only
+ *      their own SEARCH_HISTORY records.
+ *    - Tested persistence by creating searches, refreshing the app, and
+ *      confirming that previous searches still appear from Supabase.
+ *
+ * 2. TRAVEL PLANS
+ *    - Travel Plans are connected to the live TRAVEL_PLAN table.
+ *    - Implemented Create, Read, Update, and Delete operations through the UI.
+ *    - Travel Plans are associated with the authenticated user.
+ *    - Tested that edited/deleted plans are reflected in Supabase and remain
+ *      correct after refreshing the application.
+ *
+ * 3. REVIEWS
+ *    - Connected review creation and loading to the live REVIEW table and the
+ *      category-specific review tables.
+ *    - Supports Restaurant, Accommodation, Convenience Store, Landmark, and
+ *      Tourist Destination reviews.
+ *    - Implemented review Edit and Delete behavior with ownership checks.
+ *    - Added/used RLS rules so users can modify only their own reviews.
+ *    - Reviews persist after refresh and can be viewed by logged-out visitors.
+ *
+ * 4. AUTHENTICATION / SESSION
+ *    - Supabase Auth is used for registration and login.
+ *    - New Auth users are linked to USER_INFO through the database trigger.
+ *    - Session restoration is handled with Supabase getSession/onAuthStateChange.
+ *    - Sign Out uses supabase.auth.signOut() instead of only changing React state.
+ *
+ * 5. DATABASE CONNECTION
+ *    - The application uses the MAIN Supabase project, not the old test_dB
+ *      project.
+ *    - Supabase data is loaded through src/config/supabaseClient.
+ *    - The app uses the real database records for countries, cities,
+ *      destinations, categories, reviews, travel plans, and search history.
+ *
+ * IMPORTANT DEVELOPMENT NOTE
+ * ---------------------------
+ * The numeric Category_ID values used by the frontend tabs (1–5) are a UI
+ * category system. They must not be confused with the thematic CATEGORY table
+ * values in Supabase (for example Nature, Religious, Recreational, Beach, and
+ * HISTORICAL). Child tables such as RESTAURANT and LANDMARK determine the UI
+ * category for destinations.
+ *
+ * CURRENT FEATURE STATUS
+ * ----------------------
+ * Supabase connection                 : DONE
+ * Authentication / Login / Register   : DONE
+ * Session persistence / Logout        : DONE
+ * Travel Plans CRUD                   : DONE
+ * Reviews CRUD                        : DONE
+ * Public Review Reading               : DONE
+ * Search History                      : DONE / TESTED
+ * User Profile                        : NEXT
+ * Business Partner features           : NEXT
+ * Real rating aggregation             : NEXT
+ * Mission 4 verification/validation   : LATER
+ *
+ * These comments are documentation only. They do not affect application logic.
+ * ============================================================================
+ */
+
 import supabase from './config/supabaseClient'
 import { useState, useRef, useCallback, useEffect } from "react";
 
@@ -1887,6 +1971,65 @@ interface PartnerListing {
   status: "Active" | "Pending" | "Under Review";
 }
 
+interface SearchHistoryEntry {
+  search_id: number;
+  user_id: string;
+  country_id: string | null;
+  city_id: string | null;
+  category_id: number | null;
+  search_category: string;
+  search_keyword: string;
+  search_date_time: string | null;
+  country_name: string;
+  city_name: string;
+}
+
+function SearchHistoryModal({ history, onClose }: { history: SearchHistoryEntry[]; onClose: () => void }) {
+  return (
+    <div className="fixed inset-0 z-[200] bg-black/40 flex items-center justify-center p-4 overflow-y-auto">
+      <div className="w-full max-w-lg max-h-[85vh] bg-white rounded-3xl shadow-2xl overflow-hidden my-auto">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
+          <div>
+            <h2 className="text-lg font-extrabold text-[#0b1f5c]">Search History</h2>
+            <p className="text-xs text-slate-400 mt-0.5">Your previous searches</p>
+          </div>
+          <button onClick={onClose} className="w-9 h-9 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500">✕</button>
+        </div>
+        <div className="max-h-[60vh] overflow-y-auto p-4">
+          {history.length === 0 ? (
+            <div className="py-12 text-center">
+              <div className="text-3xl mb-3">🔎</div>
+              <p className="text-sm font-semibold text-slate-600">No search history yet</p>
+              <p className="text-xs text-slate-400 mt-1">Your searches will appear here.</p>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {history.map((item) => {
+                const dateText = item.search_date_time ? new Date(item.search_date_time).toLocaleString() : "Unknown date";
+                const keyword = item.search_keyword?.trim();
+                const parts = [item.country_name, item.city_name, item.search_category].filter(Boolean);
+                const searchDetails = parts.join(" - ");
+                return (
+                  <div key={item.search_id} className="rounded-2xl border border-slate-100 bg-slate-50 px-4 py-3">
+                    <div className="flex items-start gap-3">
+                      <div className="w-9 h-9 rounded-xl bg-white flex items-center justify-center flex-shrink-0">🔎</div>
+                      <div className="min-w-0">
+                        <p className="text-sm font-bold text-slate-700 truncate">{searchDetails || "Search with filters"}</p>
+                        {keyword && <p className="text-xs text-slate-400 mt-0.5">Keyword: {keyword}</p>}
+                        <p className="text-[11px] text-slate-400 mt-1">{dateText}</p>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function App() {
   const [screen, setScreen]           = useState<Screen>("countries");
   const [country, setCountry]         = useState<Country | null>(null);
@@ -1895,6 +2038,9 @@ export default function App() {
   const [activeCatId, setActiveCatId] = useState<number>(5);
   const [dbDestinations, setDbDestinations] = useState<Destination[]>([]);
   const [dbCities, setDbCities] = useState<any[]>([]);
+  const [dbCountries, setDbCountries] = useState<any[]>([]);
+  const [searchHistory, setSearchHistory] = useState<SearchHistoryEntry[]>([]);
+  const [showSearchHistory, setShowSearchHistory] = useState(false);
   const [modal, setModal]             = useState<ModalKind>(null);
   const [isLoggedIn, setIsLoggedIn]   = useState(false);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
@@ -1963,6 +2109,47 @@ export default function App() {
     subscription.unsubscribe();
   };
 }, []);
+
+useEffect(() => {
+  if (!currentUserId) {
+    setSearchHistory([]);
+    return;
+  }
+
+  const loadSearchHistory = async () => {
+    const { data, error } = await supabase
+      .from("SEARCH_HISTORY")
+      .select("search_id, user_id, country_id, city_id, category_id, search_category, search_keyword, search_date_time")
+      .eq("user_id", currentUserId)
+      .order("search_id", { ascending: false });
+
+    if (error) {
+      console.error("SEARCH_HISTORY load error:", error);
+      setSearchHistory([]);
+      return;
+    }
+
+    const formattedHistory: SearchHistoryEntry[] = (data ?? []).map((item: any) => {
+      const dbCity = dbCities.find((cityItem: any) => String(cityItem.city_id ?? cityItem.City_ID ?? "") === String(item.city_id ?? ""));
+      const dbCountry = dbCountries.find((countryItem: any) => String(countryItem.country_id ?? countryItem.Country_ID ?? "") === String(item.country_id ?? ""));
+      return {
+        search_id: Number(item.search_id),
+        user_id: item.user_id,
+        country_id: item.country_id ?? null,
+        city_id: item.city_id ?? null,
+        category_id: item.category_id ?? null,
+        search_category: item.search_category ?? "",
+        search_keyword: item.search_keyword ?? "",
+        search_date_time: item.search_date_time ?? null,
+        country_name: dbCountry?.country_name ?? dbCountry?.Country_Name ?? "",
+        city_name: dbCity?.city_name ?? dbCity?.City_Name ?? "",
+      };
+    });
+    setSearchHistory(formattedHistory);
+  };
+
+  loadSearchHistory();
+}, [currentUserId, dbCities, dbCountries]);
 
   const loadTravelPlans = async () => {
     try {
@@ -2734,6 +2921,17 @@ useEffect(() => {
   const loadData = async () => {
     console.log("--- LOADING CITY + DESTINATIONS FROM SUPABASE ---");
 
+    // Load actual COUNTRY records for Search History labels.
+    const { data: countryData, error: countryError } = await supabase
+      .from('COUNTRY')
+      .select('*');
+
+    if (countryError) {
+      console.error("COUNTRY query error:", countryError);
+    } else {
+      setDbCountries(countryData ?? []);
+    }
+
     // Load actual CITY records
     const { data: cityData, error: cityError } = await supabase
       .from('CITY')
@@ -2922,8 +3120,13 @@ function pickCity(c: City) {
     ? CATEGORIES.find((c) => c.Category_ID === (dest.Place_Type_ID ?? dest.Category_ID)) ?? null
     : null;
   const destReviews      = dest ? [...(REVIEWS[dest.Destination_ID] ?? []), ...(liveReviews[dest.Destination_ID] ?? [])] : [];
+  const searchText = search.trim().toLowerCase();
   const shownCountries = COUNTRIES.filter((c) => {
-    const matchText = !search || c.Country_Name.toLowerCase().includes(search.toLowerCase());
+    const countryMatches = !searchText || c.Country_Name.toLowerCase().includes(searchText);
+    const cityMatches = !searchText || CITIES.some(
+      (ci) => ci.Country_ID === c.Country_ID && ci.City_Name.toLowerCase().includes(searchText)
+    );
+    const matchText = !searchText || countryMatches || cityMatches;
     const matchCountry = !filterCountry || c.Country_ID === Number(filterCountry);
     return matchText && matchCountry;
   });
@@ -2935,15 +3138,223 @@ function pickCity(c: City) {
     ? CITIES.filter((c) => c.Country_ID === Number(filterCountry))
     : CITIES;
 
-  function handleSearchGo() {
+  async function saveSearchHistory() {
+    if (!currentUserId) return;
+
+    const keyword = search.trim();
+    const selectedCategory = filterCategory
+      ? CATEGORIES.find((c) => c.Category_ID === Number(filterCategory))
+      : null;
+    const selectedStaticCountry = filterCountry ? COUNTRIES.find((c) => c.Country_ID === Number(filterCountry)) : null;
+    const selectedStaticCity = filterCity ? CITIES.find((c) => c.City_ID === Number(filterCity)) : null;
+
+    const selectedDbCity = selectedStaticCity
+      ? dbCities.find((item: any) => String(item.city_name ?? item.City_Name ?? "").trim().toLowerCase() === selectedStaticCity.City_Name.trim().toLowerCase())
+      : null;
+    const selectedDbCountry = selectedStaticCountry
+      ? dbCountries.find((item: any) => String(item.country_name ?? item.Country_Name ?? "").trim().toLowerCase() === selectedStaticCountry.Country_Name.trim().toLowerCase())
+      : null;
+
+    const countryId = selectedDbCountry?.country_id ?? selectedDbCountry?.Country_ID ?? null;
+    const cityId = selectedDbCity?.city_id ?? selectedDbCity?.City_ID ?? null;
+
+    const { data: latest, error: latestError } = await supabase
+      .from("SEARCH_HISTORY")
+      .select("search_id")
+      .order("search_id", { ascending: false })
+      .limit(1);
+
+    if (latestError) {
+      console.error("SEARCH_HISTORY ID query error:", latestError);
+      return;
+    }
+
+    const nextSearchId = latest && latest.length > 0 ? Number(latest[0].search_id) + 1 : 1;
+
+    const { error: insertError } = await supabase
+      .from("SEARCH_HISTORY")
+      .insert({
+        search_id: nextSearchId,
+        user_id: currentUserId,
+        country_id: countryId,
+        city_id: cityId,
+        // The five UI tabs are not the same as the thematic CATEGORY table IDs.
+        category_id: null,
+        search_category: selectedCategory?.Category_Type ?? null,
+        search_keyword: keyword || null,
+        search_date_time: new Date().toISOString(),
+      });
+
+    if (insertError) {
+      console.error("SEARCH_HISTORY insert error:", insertError);
+      return;
+    }
+
+    const { data: refreshedHistory, error: refreshError } = await supabase
+      .from("SEARCH_HISTORY")
+      .select("search_id, user_id, country_id, city_id, category_id, search_category, search_keyword, search_date_time")
+      .eq("user_id", currentUserId)
+      .order("search_id", { ascending: false });
+
+    if (!refreshError) {
+      const formattedHistory: SearchHistoryEntry[] = (refreshedHistory ?? []).map((item: any) => {
+        const dbCity = dbCities.find((cityItem: any) => String(cityItem.city_id ?? cityItem.City_ID ?? "") === String(item.city_id ?? ""));
+        const dbCountry = dbCountries.find((countryItem: any) => String(countryItem.country_id ?? countryItem.Country_ID ?? "") === String(item.country_id ?? ""));
+        return {
+          search_id: Number(item.search_id),
+          user_id: item.user_id,
+          country_id: item.country_id ?? null,
+          city_id: item.city_id ?? null,
+          category_id: item.category_id ?? null,
+          search_category: item.search_category ?? "",
+          search_keyword: item.search_keyword ?? "",
+          search_date_time: item.search_date_time ?? null,
+          country_name: dbCountry?.country_name ?? dbCountry?.Country_Name ?? "",
+          city_name: dbCity?.city_name ?? dbCity?.City_Name ?? "",
+        };
+      });
+      setSearchHistory(formattedHistory);
+    }
+  }
+
+  async function handleSearchGo() {
+    await saveSearchHistory();
+
+    // Keyword searches should actually resolve to a destination/city/country.
+    // Previously the keyword only filtered the country cards, so "Baguio" and
+    // "Vigan" could show 0 results because the country names themselves did
+    // not contain those city names.
+    if (search.trim()) {
+      const keyword = search.trim().toLowerCase();
+
+      const keywordCity = CITIES.find((ci) =>
+        ci.City_Name.toLowerCase().includes(keyword)
+      );
+
+      if (keywordCity) {
+        const parentCountry = COUNTRIES.find(
+          (co) => co.Country_ID === keywordCity.Country_ID
+        );
+
+        if (parentCountry) setCountry(parentCountry);
+        setCity(keywordCity);
+
+        const dbCity = dbCities.find((item: any) => {
+          const dbCityName = item.city_name ?? item.City_Name ?? "";
+          return dbCityName.trim().toLowerCase() === keywordCity.City_Name.trim().toLowerCase();
+        });
+        const dbCityId = dbCity?.city_id ?? dbCity?.City_ID;
+        const cityDestinations = dbCityId
+          ? dbDestinations.filter((d) => normId(d.City_ID) === normId(dbCityId))
+          : [];
+        const present = [...new Set(
+          cityDestinations
+            .map((d) => d.Place_Type_ID)
+            .filter((id): id is number => id !== null && id !== undefined)
+        )];
+
+        setActiveCatId(present.includes(5) ? 5 : (present[0] ?? 5));
+        go("city");
+        return;
+      }
+
+      const keywordCountry = COUNTRIES.find((co) =>
+        co.Country_Name.toLowerCase().includes(keyword)
+      );
+
+      if (keywordCountry?.interactable) {
+        pickCountry(keywordCountry);
+        return;
+      }
+
+      const keywordDestination = dbDestinations.find((d) =>
+        d.Destination_Name.toLowerCase().includes(keyword)
+      );
+
+      if (keywordDestination) {
+        const destinationCity = dbCities.find((item: any) =>
+          String(item.city_id ?? item.City_ID ?? "") === String(keywordDestination.City_ID ?? "")
+        );
+
+        if (destinationCity) {
+          const staticCity = CITIES.find((ci) =>
+            ci.City_Name.trim().toLowerCase() ===
+            String(destinationCity.city_name ?? destinationCity.City_Name ?? "").trim().toLowerCase()
+          );
+          if (staticCity) {
+            const parentCountry = COUNTRIES.find(
+              (co) => co.Country_ID === staticCity.Country_ID
+            );
+            if (parentCountry) setCountry(parentCountry);
+            setCity(staticCity);
+            setActiveCatId(keywordDestination.Place_Type_ID ?? 5);
+            go("city");
+            return;
+          }
+        }
+      }
+    }
+
     if (filterCity) {
-      const c = CITIES.find((ci) => ci.City_ID === Number(filterCity));
-      if (c) { pickCity(c); return; }
+      const selectedCity = CITIES.find((ci) => ci.City_ID === Number(filterCity));
+      if (selectedCity) {
+        // A city can be selected without first selecting a country.
+        // Set the matching country too so the city screen always has
+        // the parent country it requires for rendering.
+        const parentCountry = COUNTRIES.find(
+          (co) => co.Country_ID === selectedCity.Country_ID
+        );
+        if (parentCountry) {
+          setCountry(parentCountry);
+        }
+
+        setCity(selectedCity);
+
+        const dbCity = dbCities.find((item: any) => {
+          const dbCityName = item.city_name ?? item.City_Name ?? "";
+          return dbCityName.trim().toLowerCase() === selectedCity.City_Name.trim().toLowerCase();
+        });
+        const dbCityId = dbCity?.city_id ?? dbCity?.City_ID;
+
+        const cityDestinations = dbCityId
+          ? dbDestinations.filter((d) => normId(d.City_ID) === normId(dbCityId))
+          : [];
+
+        const present = [
+          ...new Set(
+            cityDestinations
+              .map((d) => d.Place_Type_ID)
+              .filter((id): id is number => id !== null && id !== undefined)
+          ),
+        ];
+
+        const requestedCategory = filterCategory
+          ? Number(filterCategory)
+          : null;
+
+        setActiveCatId(
+          requestedCategory && CATEGORIES.some((c) => c.Category_ID === requestedCategory)
+            ? requestedCategory
+            : (present.includes(5) ? 5 : (present[0] ?? 5))
+        );
+
+        go("city");
+        return;
+      }
     }
+
     if (filterCountry) {
-      const c = COUNTRIES.find((co) => co.Country_ID === Number(filterCountry));
-      if (c?.interactable) { pickCountry(c); return; }
+      const selectedCountry = COUNTRIES.find(
+        (co) => co.Country_ID === Number(filterCountry)
+      );
+      if (selectedCountry?.interactable) {
+        pickCountry(selectedCountry);
+        return;
+      }
     }
+
+    // Category-only searches stay on the countries screen for now.
+    // The selected category is still saved in Search History.
   }
 
   // ── Navbar ────────────────────────────────────────────────────────────────
@@ -2965,6 +3376,9 @@ function pickCity(c: City) {
               <div className="absolute right-0 mt-2 w-52 bg-white rounded-2xl shadow-xl border border-slate-100 overflow-hidden z-50">
                 {isLoggedIn ? (
                   <>
+                    <button onClick={() => { setModal(null); setShowSearchHistory(true); }} className="w-full flex items-center gap-3 px-4 py-3 text-sm text-slate-700 hover:bg-slate-50 transition-colors">
+                      <span>🔎</span> Search History
+                    </button>
                     <button onClick={() => { setModal(null); go("plans"); }} className="w-full flex items-center gap-3 px-4 py-3 text-sm text-slate-700 hover:bg-slate-50 transition-colors">
                       <span>🗓️</span> My Travel Plans
                     </button>
@@ -3028,6 +3442,13 @@ function pickCity(c: City) {
 
 const Modals = () => (
   <>
+    {showSearchHistory && (
+      <SearchHistoryModal
+        history={searchHistory}
+        onClose={() => setShowSearchHistory(false)}
+      />
+    )}
+
     {modal === "register" && (
       <RegisterModal
         onClose={() => setModal(null)}
