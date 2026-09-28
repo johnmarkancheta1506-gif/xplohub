@@ -1283,14 +1283,10 @@ function EditReviewModal({
       const { data: { user }, error: userError } = await supabase.auth.getUser();
       if (userError || !user) throw new Error("You must be logged in to edit a review.");
 
-      const { data: ownedReview, error: ownerError } = await supabase
-        .from("REVIEW")
-        .select("Review_ID")
-        .eq("Review_ID", review.Review_ID)
-        .eq("user_id", user.id)
-        .single();
-
-      if (ownerError || !ownedReview) throw new Error("You can only edit your own review.");
+      // Ownership is enforced by the UPDATE RLS policy below.
+      // Do not perform a separate SELECT ownership check here because
+      // SELECT RLS can prevent the row from being returned even when the
+      // authenticated user is the owner.
 
       const { data: updatedReview, error: reviewError } = await supabase
         .from("REVIEW")
@@ -1635,6 +1631,29 @@ function SavePlanModal({
         throw new Error("You must be logged in to save a travel plan.");
       }
 
+      // Get the actual database category for this destination.
+      // IMPORTANT: Destination.Category_ID can represent the thematic Supabase
+      // category for DB-loaded destinations, while static/demo destinations
+      // may use the frontend UI category IDs (1-5). Travel plans must always
+      // use the real CATEGORY.category_id foreign key from Supabase.
+      const { data: dbDestination, error: destinationError } = await supabase
+        .from("DESTINATION")
+        .select("destination_id, category_id")
+        .eq("destination_id", dest.Destination_ID)
+        .single();
+
+      if (destinationError || !dbDestination) {
+        throw new Error(
+          "This destination is not available in the Supabase database, so it cannot be saved to a travel plan."
+        );
+      }
+
+      if (dbDestination.category_id === null || dbDestination.category_id === undefined) {
+        throw new Error(
+          "This destination does not have a database category assigned, so it cannot be saved to a travel plan."
+        );
+      }
+
       // Get the next TravelPlan_ID
       const { data: existingPlans, error: idError } = await supabase
         .from("TRAVEL_PLAN")
@@ -1656,7 +1675,9 @@ function SavePlanModal({
         .from("TRAVEL_PLAN")
         .insert({
           travelplan_id: nextTravelPlanId,
-          category_id: dest.Category_ID,
+          // Use the actual CATEGORY.category_id from the database, not the
+          // frontend UI category ID.
+          category_id: Number(dbDestination.category_id),
           destination_id: dest.Destination_ID,
           plan_name: planName.trim(),
           start_date: startDate,
@@ -2501,16 +2522,10 @@ const deleteReviewFromSupabase = async (review: ReviewEntry): Promise<void> => {
       throw new Error("You must be logged in to delete a review.");
     }
 
-    const { data: ownedReview, error: ownerError } = await supabase
-      .from("REVIEW")
-      .select("Review_ID")
-      .eq("Review_ID", review.Review_ID)
-      .eq("user_id", user.id)
-      .single();
-
-    if (ownerError || !ownedReview) {
-      throw new Error("You can only delete your own review.");
-    }
+    // Ownership is enforced by the DELETE RLS policy below.
+    // Do not perform a separate SELECT ownership check here because
+    // SELECT RLS can prevent the row from being returned even when the
+    // authenticated user is the owner.
 
     const childTables = [
       "RESTAURANT_REVIEW",
