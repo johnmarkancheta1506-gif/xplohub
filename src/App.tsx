@@ -1205,7 +1205,9 @@ function WriteReviewModal({ dest, catType, onClose, onSubmit }: { dest: Destinat
     if (!comment.trim()) return;
 
     const newReview: ReviewEntry = {
-      Review_ID: Date.now(),
+      // Temporary value only. The real Review_ID is assigned by Supabase
+      // and returned after the REVIEW record is inserted.
+      Review_ID: 0,
       reviewer_name: "You",
       reviewer_avatar: "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=60&h=60&fit=crop&auto=format",
       Rating: rating,
@@ -2252,7 +2254,7 @@ useEffect(() => {
   review: ReviewEntry,
   dest: Destination,
   catType: CategoryType
-): Promise<string> => {
+): Promise<number> => {
   try {
     // 1. Get the currently logged-in Supabase user
     const {
@@ -2504,7 +2506,7 @@ useEffect(() => {
       category: catType,
     });
 
-    return user.id;
+    return nextReviewId;
 
   } catch (error: any) {
     console.error("Error saving review:", error);
@@ -3501,7 +3503,7 @@ const Modals = () => (
         onClose={() => setModal(null)}
         onSubmit={async (r) => {
           try {
-            const savedUserId = await saveReviewToSupabase(
+            const savedReviewId = await saveReviewToSupabase(
               r,
               dest,
               destCat.Category_Type
@@ -3511,7 +3513,11 @@ const Modals = () => (
               ...prev,
               [dest.Destination_ID]: [
                 ...(prev[dest.Destination_ID] ?? []),
-                { ...r, user_id: savedUserId }
+                {
+                  ...r,
+                  Review_ID: savedReviewId,
+                  user_id: currentUserId ?? undefined,
+                }
               ]
             }));
 
