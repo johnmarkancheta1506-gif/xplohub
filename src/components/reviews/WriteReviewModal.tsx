@@ -1,7 +1,7 @@
 import { useState, type ChangeEvent } from "react";
 import Overlay from "../common/Overlay";
 import ModalHeader from "../common/ModalHeader";
-import { CAT_ICON } from "../../data/constants";
+import { CategoryIcon, Icon } from "../common/Icon";
 import type { CategoryType, Destination, ReviewEntry } from "../../types";
 
 export default function WriteReviewModal({ dest, catType, onClose, onSubmit }: { dest: Destination; catType: CategoryType; onClose: () => void; onSubmit: (r: ReviewEntry) => Promise<void> }) {
@@ -37,14 +37,14 @@ export default function WriteReviewModal({ dest, catType, onClose, onSubmit }: {
         <p className="text-xs text-slate-400">{dest.Destination_Name}</p>
         <div>
           <label className="block text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-2">Overall Rating</label>
-          <div className="flex gap-2">{[1,2,3,4,5].map((s) => <button key={s} onClick={() => setRating(s)} className={`text-2xl transition-transform hover:scale-110 ${s <= rating ? "text-amber-400" : "text-gray-200"}`}>★</button>)}</div>
+          <div className="flex gap-2">{[1,2,3,4,5].map((s) => <button key={s} type="button" aria-label={`${s} star${s === 1 ? "" : "s"}`} onClick={() => setRating(s)} className={`transition-transform hover:scale-110 ${s <= rating ? "text-amber-400" : "text-gray-200"}`}><Icon name="star" size={24} strokeWidth={1.6} /></button>)}</div>
         </div>
         <div>
           <label className="block text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-1">Review Comment</label>
           <textarea rows={3} value={comment} onChange={(e: any) => setComment(e.target.value)} placeholder="Share your experience..." className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-100 resize-none" />
         </div>
         <div className="bg-slate-50 rounded-xl p-4 space-y-3">
-          <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">{CAT_ICON[catType]} {catType}-Specific Feedback</p>
+          <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider"><CategoryIcon type={catType} size={13} className="mr-1 inline-block align-[-2px]" />{catType}-Specific Feedback</p>
           <div>
             <label className="block text-xs text-slate-400 mb-1">Rating</label>
             <select value={subRating} onChange={(e: any) => setSubRating(Number(e.target.value))} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm">{[5,4,3,2,1].map((v) => <option key={v} value={v}>{v} — {["","Poor","Fair","Good","Very Good","Excellent"][v]}</option>)}</select>

@@ -4,12 +4,14 @@ import Overlay from "../common/Overlay";
 import Field from "../common/Field";
 import ModalHeader from "../common/ModalHeader";
 import { signInWithGoogle } from "../../services/authService";
+import { Icon } from "../common/Icon";
 
 export default function RegisterModal({ onClose, onSwitch }: { onClose: () => void; onSwitch: () => void }) {
   const [fullName, setFullName] = useState("");
   const [username, setUsername] = useState("");
   const [email, setEmail]       = useState("");
   const [password, setPassword] = useState("");
+  const [gender, setGender] = useState<"Male" | "Female" | "">("");
   const [loading, setLoading]   = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
 
@@ -25,6 +27,7 @@ export default function RegisterModal({ onClose, onSwitch }: { onClose: () => vo
         data: {
           full_name: fullName,
           username: username,
+          gender: gender,
         },
       },
     });
@@ -54,10 +57,28 @@ export default function RegisterModal({ onClose, onSwitch }: { onClose: () => vo
         <Field label="Username" placeholder="Choose a unique username" value={username} onChange={(e: ChangeEvent<HTMLInputElement>) => setUsername(e.target.value)} />
         <Field label="Email Address" type="email" placeholder="your@email.com" value={email} onChange={(e: ChangeEvent<HTMLInputElement>) => setEmail(e.target.value)} />
         <Field label="Password" type="password" placeholder="Minimum 6 characters" value={password} onChange={(e: ChangeEvent<HTMLInputElement>) => setPassword(e.target.value)} />
+
+        <div>
+          <label className="mb-1.5 block text-[11px] font-semibold uppercase tracking-wider text-slate-400">Gender</label>
+          <div className="grid grid-cols-2 gap-2">
+            {(["Male", "Female"] as const).map((option) => (
+              <button
+                key={option}
+                type="button"
+                onClick={() => setGender(option)}
+                className={`flex items-center justify-center gap-2 rounded-xl border px-3 py-2.5 text-sm font-semibold transition-all ${gender === option ? "border-[#0b1f5c] bg-[#0b1f5c] text-white" : "border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:bg-slate-50"}`}
+              >
+                <Icon name={option === "Male" ? "male" : "female"} size={16} />
+                {option}
+              </button>
+            ))}
+          </div>
+          <p className="mt-1.5 text-[10px] text-slate-400">Used only to choose your default profile avatar. Google accounts use their Google profile photo when available.</p>
+        </div>
         
         <button 
           onClick={handleRegister} 
-          disabled={loading || !email || !password || password.length < 6}
+          disabled={loading || !email || !password || password.length < 6 || !gender}
           className="w-full bg-[#0b1f5c] text-white font-semibold py-3 rounded-xl hover:bg-[#162d7a] transition-all text-sm disabled:opacity-40"
         >
           {loading ? "Registering..." : "Create Account"}

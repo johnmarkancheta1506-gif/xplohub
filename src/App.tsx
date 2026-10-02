@@ -26,8 +26,9 @@ import type {
   SearchHistoryEntry,
 } from "./types";
 
-import { getProfileInitial, normId } from "./services/idUtils";
-import { CATEGORIES, DB_TABLE, CAT_COLOR, CAT_ICON, FLAGS } from "./data/constants";
+import { normId } from "./services/idUtils";
+import { ensureUserInfo } from "./services/authService";
+import { CATEGORIES, DB_TABLE, CAT_COLOR, FLAGS } from "./data/constants";
 import { COUNTRIES } from "./data/countries";
 import { CITIES } from "./data/cities";
 import { DESTINATIONS } from "./data/destinations";
@@ -36,6 +37,8 @@ import { REVIEWS } from "./data/reviews";
 import Stars from "./components/common/Stars";
 import BackBtn from "./components/common/BackBtn";
 import Overlay from "./components/common/Overlay";
+import { CategoryIcon, Icon } from "./components/common/Icon";
+import UserAvatar from "./components/common/UserAvatar";
 import Field from "./components/common/Field";
 import ModalHeader from "./components/common/ModalHeader";
 
@@ -66,6 +69,25 @@ type ModalKind = "register" | "login" | "partner" | "review" | "plan" | "profile
 // Popular Cities showcase order: live cities first, coming-soon cities after.
 const POPULAR_CITY_IDS = [3, 5, 1, 4, 2, 6, 7, 8];
 
+function getAuthAvatar(user: any): string | null {
+  const identity = user?.identities?.find((item: any) => item?.provider === "google");
+  return user?.user_metadata?.avatar_url
+    || user?.user_metadata?.picture
+    || user?.user_metadata?.avatar
+    || identity?.identity_data?.picture
+    || null;
+}
+
+function getAuthGender(user: any): "Male" | "Female" | null {
+  const gender = user?.user_metadata?.gender;
+  return gender === "Male" || gender === "Female" ? gender : null;
+}
+
+function syncAuthProfileMeta(user: any, setAvatar: (value: string | null) => void, setGender: (value: "Male" | "Female" | null) => void) {
+  setAvatar(getAuthAvatar(user));
+  setGender(getAuthGender(user));
+}
+
 export default function App() {
   const [screen, setScreen]           = useState<Screen>("countries");
   const [country, setCountry]         = useState<Country | null>(null);
@@ -82,6 +104,8 @@ export default function App() {
   const [authLoading, setAuthLoading] = useState(true);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [currentUserName, setCurrentUserName] = useState("");
+  const [currentUserGender, setCurrentUserGender] = useState<"Male" | "Female" | null>(null);
+  const [currentUserAvatar, setCurrentUserAvatar] = useState<string | null>(null);
   const [search, setSearch]           = useState("");
   const [filterCountry, setFilterCountry] = useState("");
   const [filterCity, setFilterCity]       = useState("");
@@ -114,13 +138,22 @@ export default function App() {
     }
 
     if (session?.user) {
+      try {
+        await ensureUserInfo(session.user);
+      } catch (profileError) {
+        console.error("USER_INFO session initialization error:", profileError);
+      }
+
       setIsLoggedIn(true);
       setCurrentUserId(session.user.id);
+      syncAuthProfileMeta(session.user, setCurrentUserAvatar, setCurrentUserGender);
 
       console.log("Session restored:", session.user.id);
     } else {
       setIsLoggedIn(false);
       setCurrentUserId(null);
+      setCurrentUserAvatar(null);
+      setCurrentUserGender(null);
 
       console.log("No active session");
     }
@@ -139,9 +172,12 @@ export default function App() {
     if (session?.user) {
       setIsLoggedIn(true);
       setCurrentUserId(session.user.id);
+      syncAuthProfileMeta(session.user, setCurrentUserAvatar, setCurrentUserGender);
     } else {
       setIsLoggedIn(false);
       setCurrentUserId(null);
+      setCurrentUserAvatar(null);
+      setCurrentUserGender(null);
     }
   });
 
@@ -157,6 +193,9 @@ useEffect(() => {
   }
 
   const loadCurrentUserName = async () => {
+    const { data: authData } = await supabase.auth.getUser();
+    syncAuthProfileMeta(authData.user, setCurrentUserAvatar, setCurrentUserGender);
+
     const { data, error } = await supabase
       .from("USER_INFO")
       .select("full_name")
@@ -165,10 +204,11 @@ useEffect(() => {
 
     if (error) {
       console.error("USER_INFO current user load error:", error);
+      setCurrentUserName(authData.user?.user_metadata?.full_name ?? authData.user?.user_metadata?.name ?? "");
       return;
     }
 
-    setCurrentUserName(data?.full_name ?? "");
+    setCurrentUserName(data?.full_name ?? authData.user?.user_metadata?.full_name ?? authData.user?.user_metadata?.name ?? "");
   };
 
   loadCurrentUserName();
@@ -1515,6 +1555,8 @@ function pickCity(c: City) {
                       setIsLoggedIn(false);
                       setCurrentUserId(null);
                       setCurrentUserName("");
+                      setCurrentUserAvatar(null);
+                      setCurrentUserGender(null);
                       setIsPartner(false);
                       setPartnerBusinesses([]);
                       setPartnerData(null);
@@ -1527,7 +1569,7 @@ function pickCity(c: City) {
             )}
           </div>
 
-          <button onClick={() => setModal("profile")} className="flex h-10 w-10 items-center justify-center rounded-full bg-[#0b1f5c] text-sm font-black text-white shadow-sm transition hover:bg-[#162d7a]">{getProfileInitial(currentUserName)}</button>
+          <button onClick={() => setModal("profile")} className="rounded-full transition-transform hover:scale-105" aria-label="Open profile"><UserAvatar userId={currentUserId} gender={currentUserGender} avatarUrl={currentUserAvatar} name={currentUserName} sizeClass="h-10 w-10" showBorder /></button>
         </div>
       </div>
     </header>
@@ -1553,9 +1595,11 @@ const Modals = () => (
       <LoginModal
         onClose={() => setModal(null)}
         onSwitch={() => setModal("register")}
-        onLogin={(userId) => {
+        onLogin={async (userId) => {
           setCurrentUserId(userId);
           setIsLoggedIn(true);
+          const { data } = await supabase.auth.getUser();
+          syncAuthProfileMeta(data.user, setCurrentUserAvatar, setCurrentUserGender);
         }}
       />
     )}
@@ -1565,6 +1609,8 @@ const Modals = () => (
         onClose={() => setModal(null)}
         onProfileUpdated={(updatedProfile) => {
           setCurrentUserName(updatedProfile.full_name);
+          setCurrentUserGender(updatedProfile.gender ?? null);
+          setCurrentUserAvatar(updatedProfile.avatar_url ?? null);
         }}
       />
     )}
@@ -1983,7 +2029,7 @@ const Modals = () => (
                 <div className="relative h-40 bg-slate-200 overflow-hidden">
                   <img src={c.City_Image} alt={c.City_Name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
                   <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
-                  {cat && <span className={`absolute bottom-3 left-3 text-[10px] font-bold uppercase tracking-wider px-2.5 py-1 rounded-full ${CAT_COLOR[cat.Category_Type].badge}`}>{CAT_ICON[cat.Category_Type]} {cat.Category_Type}</span>}
+                  {cat && <span className={`absolute bottom-3 left-3 text-[10px] font-bold uppercase tracking-wider px-2.5 py-1 rounded-full ${CAT_COLOR[cat.Category_Type].badge}`}><CategoryIcon type={cat.Category_Type} size={13} className="mr-1 inline-block align-[-2px]" />{cat.Category_Type}</span>}
                 </div>
                 <div className="p-5">
                   <div className="flex items-start justify-between mb-1">
@@ -1993,7 +2039,7 @@ const Modals = () => (
                   <p className="text-xs font-semibold text-slate-500 mb-2">{c.City_Specialty}</p>
                   <p className="text-xs text-slate-500 leading-relaxed line-clamp-2">{c.City_Description}</p>
                   <div className="flex flex-wrap gap-1 mt-3">
-                    {presentTypes.map((t) => <span key={t} className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${CAT_COLOR[t].badge}`}>{CAT_ICON[t]}</span>)}
+                    {presentTypes.map((t) => <span key={t} className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${CAT_COLOR[t].badge}`}><CategoryIcon type={t} size={12} className="inline-block align-[-2px]" /></span>)}
                   </div>
                   <div className="mt-3 pt-3 border-t border-slate-100 flex justify-between text-xs text-slate-400">
                     <span>CT-{String(c.City_ID).padStart(2, "0")}</span>
@@ -2044,7 +2090,7 @@ const Modals = () => (
                       onClick={() => setActiveCatId(cid)}
                       className={`px-4 py-2 rounded-full text-sm font-semibold border transition-all ${isActive ? "bg-[#0b1f5c] text-white border-[#0b1f5c]" : "bg-white text-slate-600 border-slate-200 hover:border-slate-400 hover:text-[#0b1f5c]"}`}
                     >
-                      {CAT_ICON[cat.Category_Type]} {cat.Category_Type}
+                      <CategoryIcon type={cat.Category_Type} size={13} className="mr-1 inline-block align-[-2px]" />{cat.Category_Type}
                     </button>
                   );
                 })}
@@ -2058,7 +2104,7 @@ const Modals = () => (
 
           {/* Destination cards */}
           {filteredDests.length === 0 ? (
-            <div className="text-center py-20 text-slate-400"><div className="text-4xl mb-2">🗂️</div><p className="text-sm">No {activeCat.Category_Name} listed yet.</p></div>
+            <div className="py-20 text-center text-slate-400"><Icon name="folder" size={34} className="mx-auto mb-3" /><p className="text-sm">No {activeCat.Category_Name} listed yet.</p></div>
           ) : (
             <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-5">
               {filteredDests.map((d) => {
@@ -2076,7 +2122,7 @@ const Modals = () => (
                         <Stars n={d.Rating} />
                         <span className="text-[10px] font-mono text-slate-400 bg-slate-100 px-2 py-0.5 rounded-full">D-{String(d.Destination_ID).padStart(3,"0")}</span>
                       </div>
-                      {revCount > 0 && <p className="text-[10px] text-slate-400 mt-2">💬 {revCount} review{revCount > 1 ? "s" : ""}</p>}
+                      {revCount > 0 && <p className="mt-2 flex items-center gap-1.5 text-[10px] text-slate-400"><Icon name="notes" size={12} />{revCount} review{revCount > 1 ? "s" : ""}</p>}
                     </div>
                   </button>
                 );
@@ -2107,7 +2153,7 @@ const Modals = () => (
             {" / "}
             <button onClick={() => go("city")} className="hover:underline">{destCat.Category_Name}</button>
           </p>
-          <span className={`text-[10px] font-bold uppercase tracking-wider px-3 py-1 rounded-full mb-3 inline-block ${CAT_COLOR[destCat.Category_Type].badge}`}>{CAT_ICON[destCat.Category_Type]} {destCat.Category_Type}</span>
+          <span className={`text-[10px] font-bold uppercase tracking-wider px-3 py-1 rounded-full mb-3 inline-block ${CAT_COLOR[destCat.Category_Type].badge}`}><CategoryIcon type={destCat.Category_Type} size={13} className="mr-1 inline-block align-[-2px]" />{destCat.Category_Type}</span>
           <h1 className="text-3xl md:text-4xl font-extrabold text-white mt-2" style={{ fontFamily: "Outfit, sans-serif" }}>{dest.Destination_Name}</h1>
         </div>
       </div>
@@ -2121,14 +2167,14 @@ const Modals = () => (
         {/* Quick facts */}
         <div className="bg-white border border-slate-100 rounded-2xl px-6 py-4 mt-4 shadow-lg flex flex-wrap gap-6 mb-8">
           {[
-            { icon: "📍", label: "Address",   val: dest.Address },
-            { icon: "📞", label: "Contact",   val: dest.Contact_Number },
-            { icon: "⏰", label: "Hours",     val: dest.Operating_Hours },
-            { icon: "🗂️", label: "Category",  val: destCat.Category_Name },
-            { icon: "🆔", label: "ID",        val: `D-${String(dest.Destination_ID).padStart(3,"0")}` },
+            { icon: "location" as const, label: "Address",   val: dest.Address },
+            { icon: "phone" as const, label: "Contact",   val: dest.Contact_Number },
+            { icon: "clock" as const, label: "Hours",     val: dest.Operating_Hours },
+            { icon: "tag" as const, label: "Category",  val: destCat.Category_Name },
+            { icon: "hash" as const, label: "ID",        val: `D-${String(dest.Destination_ID).padStart(3,"0")}` },
           ].map((f) => (
             <div key={f.label} className="flex items-start gap-2">
-              <span className="text-lg">{f.icon}</span>
+              <Icon name={f.icon} size={16} className="mt-0.5 shrink-0 text-slate-400" />
               <div>
                 <div className="text-[10px] text-slate-400 uppercase tracking-wide">{f.label}</div>
                 <div className="text-sm font-semibold text-[#0b1f5c] max-w-44 truncate">{f.val}</div>
@@ -2157,7 +2203,7 @@ const Modals = () => (
                 }
               </div>
               {destReviews.length === 0 ? (
-                <div className="text-center py-10 text-slate-400"><div className="text-3xl mb-2">💬</div><p className="text-sm">No reviews yet. Be the first!</p></div>
+                <div className="py-10 text-center text-slate-400"><Icon name="notes" size={30} className="mx-auto mb-3" /><p className="text-sm">No reviews yet. Be the first!</p></div>
               ) : (
                 <div className="space-y-4">
                   {destReviews.map((r) => {
@@ -2213,7 +2259,7 @@ const Modals = () => (
                       </div>
                       <p className="text-sm text-slate-600 mb-3">"{r.Review_Comment}"</p>
                       <div className="bg-slate-50 rounded-lg p-3">
-                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">{CAT_ICON[destCat.Category_Type]} {destCat.Category_Type} · {r.subtype_rating}/5</p>
+                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1"><CategoryIcon type={destCat.Category_Type} size={13} className="mr-1 inline-block align-[-2px]" />{destCat.Category_Type} · {r.subtype_rating}/5</p>
                         <p className="text-xs text-slate-500">{r.subtype_feedback}</p>
                       </div>
                     </div>
@@ -2245,7 +2291,7 @@ const Modals = () => (
                       <img src={d.Destination_Image} alt={d.Destination_Name} className="w-10 h-10 rounded-lg object-cover flex-shrink-0" />
                       <div className="min-w-0">
                         <div className="text-xs font-semibold text-[#0b1f5c] truncate">{d.Destination_Name}</div>
-                        <div className="text-[10px] text-slate-400">{CAT_ICON[c.Category_Type]} {c.Category_Type}</div>
+                        <div className="text-[10px] text-slate-400"><CategoryIcon type={c.Category_Type} size={13} className="mr-1 inline-block align-[-2px]" />{c.Category_Type}</div>
                       </div>
                     </button>
                   );
@@ -2377,6 +2423,45 @@ const Modals = () => (
           prev.map((item) => item.partnerId === savedPartner.partnerId ? savedPartner : item)
         );
         setPartnerData(savedPartner);
+      }}
+      onDelete={async (business) => {
+        if (!business.partnerId) {
+          throw new Error("This business does not have a valid partner ID.");
+        }
+
+        const confirmed = window.confirm(
+          `Are you sure you want to permanently delete "${business.businessName}"?`
+        );
+
+        if (!confirmed) return;
+
+        const { data: { user }, error: userError } = await supabase.auth.getUser();
+
+        if (userError || !user) {
+          throw new Error("You must be logged in to delete a business.");
+        }
+
+        const { data, error } = await supabase
+          .from("BUSINESS_PARTNER")
+          .delete()
+          .eq("Partner_ID", business.partnerId)
+          .eq("user_id", user.id)
+          .select("Partner_ID");
+
+        if (error) {
+          throw error;
+        }
+
+        if (!data || data.length === 0) {
+          throw new Error("Business could not be deleted.");
+        }
+
+        setPartnerBusinesses((prev) => prev.filter((item) => item.partnerId !== business.partnerId));
+        setPartnerData(null);
+
+        const remaining = partnerBusinesses.filter((item) => item.partnerId !== business.partnerId);
+        setIsPartner(remaining.length > 0);
+        go(remaining.length > 0 ? "partner-businesses" : "countries");
       }}
       onBack={() => go("partner-businesses")}
       Navbar={Navbar}

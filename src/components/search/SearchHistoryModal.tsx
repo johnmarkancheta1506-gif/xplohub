@@ -1,5 +1,6 @@
 import React from "react";
 import type { SearchHistoryEntry } from "../../types";
+import { Icon } from "../common/Icon";
 
 export default function SearchHistoryModal({ history, onClose }: { history: SearchHistoryEntry[]; onClose: () => void }) {
   return (
@@ -10,12 +11,12 @@ export default function SearchHistoryModal({ history, onClose }: { history: Sear
             <h2 className="text-lg font-extrabold text-[#0b1f5c]">Search History</h2>
             <p className="text-xs text-slate-400 mt-0.5">Your previous searches</p>
           </div>
-          <button onClick={onClose} className="w-9 h-9 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500">✕</button>
+          <button onClick={onClose} aria-label="Close" className="flex h-9 w-9 items-center justify-center rounded-full bg-slate-100 text-slate-500 hover:bg-slate-200"><Icon name="x" size={16} /></button>
         </div>
         <div className="max-h-[60vh] overflow-y-auto p-4">
           {history.length === 0 ? (
             <div className="py-12 text-center">
-              <div className="text-3xl mb-3">🔎</div>
+              <Icon name="search" size={30} className="mx-auto mb-3 text-slate-300" />
               <p className="text-sm font-semibold text-slate-600">No search history yet</p>
               <p className="text-xs text-slate-400 mt-1">Your searches will appear here.</p>
             </div>
@@ -29,7 +30,7 @@ export default function SearchHistoryModal({ history, onClose }: { history: Sear
                 return (
                   <div key={item.search_id} className="rounded-2xl border border-slate-100 bg-slate-50 px-4 py-3">
                     <div className="flex items-start gap-3">
-                      <div className="w-9 h-9 rounded-xl bg-white flex items-center justify-center flex-shrink-0">🔎</div>
+                      <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl bg-white"><Icon name="search" size={16} className="text-slate-400" /></div>
                       <div className="min-w-0">
                         <p className="text-sm font-bold text-slate-700 truncate">{searchDetails || "Search with filters"}</p>
                         {keyword && <p className="text-xs text-slate-400 mt-0.5">Keyword: {keyword}</p>}

@@ -1,16 +1,19 @@
 import { useState, type ComponentType, type ChangeEvent } from "react";
 import Field from "../common/Field";
 import type { BusinessPartner } from "../../types";
+import { CategoryIcon, Icon } from "../common/Icon";
 
 export default function PartnerDashboard({
   partner,
   onUpdate,
+  onDelete,
   onBack,
   Navbar,
   Modals,
 }: {
   partner: BusinessPartner;
   onUpdate: (updated: BusinessPartner) => Promise<void>;
+  onDelete: (business: BusinessPartner) => Promise<void>;
   onBack: () => void;
   Navbar: ComponentType;
   Modals: ComponentType;
@@ -24,6 +27,7 @@ export default function PartnerDashboard({
   const [username, setUsername] = useState(partner.username);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const [deleting, setDeleting] = useState(false);
 
   const categories = [
     "Restaurant",
@@ -90,17 +94,6 @@ export default function PartnerDashboard({
     setEditing(false);
   };
 
-  const businessIcon =
-    partner.businessCategory === "Restaurant"
-      ? "🍽️"
-      : partner.businessCategory === "Accommodation"
-      ? "🏨"
-      : partner.businessCategory === "Convenience Store"
-      ? "🏪"
-      : partner.businessCategory === "Landmark"
-      ? "🏛️"
-      : "🌿";
-
   return (
     <div className="min-h-screen bg-[#f7f8fa]">
       <Navbar />
@@ -109,9 +102,7 @@ export default function PartnerDashboard({
           onClick={onBack}
           className="flex items-center gap-1.5 text-xs font-semibold text-slate-400 hover:text-[#0b1f5c] mb-5 transition-colors"
         >
-          <svg viewBox="0 0 24 24" className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2}>
-            <path d="M19 12H5M12 5l-7 7 7 7" strokeLinecap="round" strokeLinejoin="round" />
-          </svg>
+          <Icon name="arrow-left" size={16} />
           Back to My Businesses
         </button>
 
@@ -120,7 +111,7 @@ export default function PartnerDashboard({
             <div className="flex items-start justify-between gap-4">
               <div className="flex items-start gap-4 min-w-0">
                 <div className="w-14 h-14 rounded-2xl bg-[#0b1f5c] flex items-center justify-center text-2xl flex-shrink-0">
-                  {businessIcon}
+                  <CategoryIcon type={partner.businessCategory as any} size={24} />
                 </div>
                 <div className="min-w-0">
                   <h1
@@ -141,7 +132,7 @@ export default function PartnerDashboard({
                   onClick={() => setEditing(true)}
                   className="px-4 py-2.5 rounded-xl bg-[#0b1f5c] text-white text-sm font-semibold hover:bg-[#162d7a] transition-all whitespace-nowrap"
                 >
-                  ✏️ Edit Business
+                  <Icon name="edit" size={15} /> Edit Business
                 </button>
               )}
             </div>
@@ -177,6 +168,35 @@ export default function PartnerDashboard({
                   </span>
                 </div>
               ))}
+
+              <div className="flex flex-wrap gap-3 pt-4">
+                <button
+                  onClick={() => setEditing(true)}
+                  className="inline-flex items-center gap-2 rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-semibold text-slate-600 transition hover:bg-slate-50"
+                >
+                  <Icon name="edit" size={15} />
+                  Edit Business
+                </button>
+                <button
+                  onClick={async () => {
+                    setDeleting(true);
+                    setError("");
+                    try {
+                      await onDelete(partner);
+                    } catch (deleteError: any) {
+                      console.error("Business delete error:", deleteError);
+                      setError(deleteError?.message || "Failed to delete the business.");
+                    } finally {
+                      setDeleting(false);
+                    }
+                  }}
+                  disabled={deleting}
+                  className="inline-flex items-center gap-2 rounded-xl border border-red-200 px-4 py-2.5 text-sm font-semibold text-red-600 transition hover:bg-red-50 disabled:opacity-50"
+                >
+                  <Icon name="trash" size={15} />
+                  {deleting ? "Deleting..." : "Delete Business"}
+                </button>
+              </div>
 
               <div className="pt-4">
                 <div className="rounded-2xl bg-slate-50 border border-slate-100 p-4">

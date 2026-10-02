@@ -4,25 +4,10 @@ import Overlay from "../common/Overlay";
 import Field from "../common/Field";
 import ModalHeader from "../common/ModalHeader";
 import type { UserProfile } from "../../types";
+import UserAvatar from "../common/UserAvatar";
+import { ensureUserInfo } from "../../services/authService";
+import { Icon } from "../common/Icon";
 
-
-const getProfileInitial = (fullName: string | null | undefined): string => {
-  const name = (fullName ?? "").trim();
-
-  if (!name) return "U";
-
-  // USER_INFO may store names as "Last Name, First Name".
-  // Use the first-name portion for the avatar when a comma is present.
-  if (name.includes(",")) {
-    const firstNamePart = name.split(",")[1].trim();
-    if (firstNamePart) {
-      return firstNamePart.charAt(0).toUpperCase();
-    }
-  }
-
-  // Otherwise use the first word of a normal "First Name Last Name" format.
-  return name.split(/\s+/)[0].charAt(0).toUpperCase();
-};
 
 export default function UserProfileModal({
   onClose,
@@ -42,6 +27,8 @@ export default function UserProfileModal({
   const [contactNumber, setContactNumber] = useState("");
   const [address, setAddress] = useState("");
   const [travelPreference, setTravelPreference] = useState("");
+  const [gender, setGender] = useState<"Male" | "Female" | "">("");
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
 
   const loadProfile = async () => {
     setLoading(true);
@@ -57,17 +44,30 @@ export default function UserProfileModal({
         throw new Error("You must be logged in to view your profile.");
       }
 
+      const authGender = user.user_metadata?.gender;
+      const googleIdentity = user.identities?.find((item: any) => item.provider === "google");
+      const authAvatar = user.user_metadata?.avatar_url || user.user_metadata?.picture || user.user_metadata?.avatar || googleIdentity?.identity_data?.picture || null;
+      const authProvider = user.app_metadata?.provider ?? null;
+      setGender(authGender === "Male" || authGender === "Female" ? authGender : "");
+      setAvatarUrl(authAvatar);
+
+      try {
+        await ensureUserInfo(user);
+      } catch (profileInitError) {
+        console.error("USER_INFO profile initialization error:", profileInitError);
+      }
+
       const { data, error } = await supabase
         .from("USER_INFO")
         .select(
           "user_id, full_name, username, email, contact_number, address, travel_preference, account_status, registration_date"
         )
         .eq("user_id", user.id)
-        .single();
+        .maybeSingle();
 
       if (error || !data) {
         throw new Error(
-          "Your profile could not be found in USER_INFO."
+          "Your profile could not be loaded. Please try opening it again."
         );
       }
 
@@ -81,6 +81,9 @@ export default function UserProfileModal({
         travel_preference: data.travel_preference ?? null,
         account_status: data.account_status ?? null,
         registration_date: data.registration_date ?? null,
+        gender: authGender === "Male" || authGender === "Female" ? authGender : null,
+        avatar_url: authAvatar,
+        auth_provider: authProvider,
       };
 
       setProfile(loadedProfile);
@@ -120,6 +123,14 @@ export default function UserProfileModal({
         throw new Error("You must be logged in to update your profile.");
       }
 
+      const { error: authProfileError } = await supabase.auth.updateUser({
+        data: { gender: gender || null },
+      });
+
+      if (authProfileError) {
+        throw authProfileError;
+      }
+
       const { data, error } = await supabase
         .from("USER_INFO")
         .update({
@@ -149,6 +160,9 @@ export default function UserProfileModal({
         travel_preference: data.travel_preference ?? null,
         account_status: data.account_status ?? null,
         registration_date: data.registration_date ?? null,
+        gender: gender || null,
+        avatar_url: avatarUrl,
+        auth_provider: user.app_metadata?.provider ?? null,
       };
 
       setProfile(updatedProfile);
@@ -175,6 +189,8 @@ export default function UserProfileModal({
     setContactNumber(profile.contact_number ?? "");
     setAddress(profile.address ?? "");
     setTravelPreference(profile.travel_preference ?? "");
+    setGender(profile.gender ?? "");
+    setAvatarUrl(profile.avatar_url ?? null);
     setErrorMsg("");
     setEditing(false);
   };
@@ -195,16 +211,25 @@ export default function UserProfileModal({
           </div>
         ) : profile ? (
           <>
-            <div className="flex items-center gap-4 bg-slate-50 rounded-2xl p-4">
-              <div className="w-14 h-14 rounded-full bg-[#0b1f5c] flex items-center justify-center text-white text-xl font-bold flex-shrink-0">
-                {getProfileInitial(profile.full_name)}
-              </div>
+            <div className="flex items-center gap-4 rounded-2xl bg-slate-50 p-4">
+              <UserAvatar
+                userId={profile.user_id}
+                gender={profile.gender}
+                avatarUrl={profile.avatar_url}
+                name={profile.full_name}
+                sizeClass="h-16 w-16"
+                showBorder
+              />
               <div className="min-w-0">
-                <h3 className="font-extrabold text-[#0b1f5c] text-lg truncate">
+                <h3 className="truncate text-lg font-extrabold text-[#0b1f5c]">
                   {profile.full_name || "User"}
                 </h3>
-                <p className="text-xs text-slate-400 truncate">
+                <p className="truncate text-xs text-slate-400">
                   {profile.username ? `@${profile.username}` : "No username set"}
+                </p>
+                <p className="mt-1 flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-slate-400">
+                  <Icon name={profile.auth_provider === "google" ? "globe" : "user"} size={11} />
+                  {profile.auth_provider === "google" ? "Google account" : "Email account"}
                 </p>
               </div>
             </div>
@@ -258,7 +283,7 @@ export default function UserProfileModal({
                   onClick={() => setEditing(true)}
                   className="w-full bg-[#0b1f5c] text-white font-semibold py-3 rounded-xl hover:bg-[#162d7a] transition-all text-sm"
                 >
-                  ✏️ Edit Profile
+                  <span className="inline-flex items-center justify-center gap-2"><Icon name="edit" size={15} /> Edit Profile</span>
                 </button>
               </div>
             ) : (
@@ -306,6 +331,24 @@ export default function UserProfileModal({
                     placeholder="e.g. Beaches, culture, food, nature..."
                     className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-100 resize-none"
                   />
+                </div>
+
+                <div>
+                  <label className="mb-1.5 block text-[11px] font-semibold uppercase tracking-wider text-slate-400">Avatar style</label>
+                  <div className="grid grid-cols-2 gap-2">
+                    {(["Male", "Female"] as const).map((option) => (
+                      <button
+                        key={option}
+                        type="button"
+                        onClick={() => setGender(option)}
+                        className={`flex items-center justify-center gap-2 rounded-xl border px-3 py-2.5 text-sm font-semibold transition-all ${gender === option ? "border-[#0b1f5c] bg-[#0b1f5c] text-white" : "border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:bg-slate-50"}`}
+                      >
+                        <Icon name={option === "Male" ? "male" : "female"} size={16} />
+                        {option}
+                      </button>
+                    ))}
+                  </div>
+                  <p className="mt-1.5 text-[10px] text-slate-400">Google profile photos stay in place when available.</p>
                 </div>
 
                 <div className="bg-slate-50 rounded-xl p-3 text-xs text-slate-500">

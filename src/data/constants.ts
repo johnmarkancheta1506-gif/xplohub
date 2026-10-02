@@ -24,12 +24,5 @@ export const CAT_COLOR: Record<CategoryType, { card: string; badge: string }> = 
   "Tourist Destination": { card: "bg-purple-700",  badge: "bg-purple-100 text-purple-700"  },
 };
 
-export const CAT_ICON: Record<CategoryType, string> = {
-  "Restaurant":          "🍽️",
-  "Accommodation":       "🏨",
-  "Convenience Store":   "🏪",
-  "Landmark":            "🏛️",
-  "Tourist Destination": "🗺️",
-};
 
 export const FLAGS: Record<number, string> = { 1: "🇵🇭", 2: "🇯🇵", 3: "🇬🇷", 4: "🇮🇩", 5: "🇰🇷", 6: "🇹🇭", 7: "🇮🇹", 8: "🇫🇷", 9: "🇦🇺", 10: "🇺🇸" };

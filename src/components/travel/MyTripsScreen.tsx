@@ -1,5 +1,6 @@
 import type { ComponentType } from "react";
 import type { Destination } from "../../types";
+import { Icon } from "../common/Icon";
 
 type TravelPlanRecord = {
   travelplan_id: number | string;
@@ -116,7 +117,7 @@ export default function MyTripsScreen({
               onClick={onBack}
               className="inline-flex items-center gap-2 text-sm font-semibold text-slate-500 hover:text-[#0b1f5c] transition-colors"
             >
-              <span className="text-lg">←</span>
+              <Icon name="arrow-left" size={17} />
               Explore
             </button>
 
@@ -202,7 +203,7 @@ export default function MyTripsScreen({
             <section className="mt-5 overflow-hidden rounded-[26px] border border-slate-200 bg-white shadow-sm">
               <div className="grid items-center gap-8 p-7 sm:p-10 lg:grid-cols-[1.1fr_0.9fr] lg:p-12">
                 <div>
-                  <div className="inline-flex h-11 w-11 items-center justify-center rounded-2xl bg-[#0b1f5c] text-xl text-white shadow-sm">✦</div>
+                  <div className="inline-flex h-11 w-11 items-center justify-center rounded-2xl bg-[#0b1f5c] text-white shadow-sm"><Icon name="spark" size={19} /></div>
                   <h3
                     className="mt-5 text-2xl font-extrabold text-[#0b1f5c]"
                     style={{ fontFamily: "Outfit, sans-serif" }}
@@ -218,7 +219,7 @@ export default function MyTripsScreen({
                     className="mt-6 inline-flex items-center gap-2 rounded-xl bg-[#0b1f5c] px-5 py-3 text-sm font-bold text-white hover:bg-[#162d7a] transition-colors"
                   >
                     Explore destinations
-                    <span>→</span>
+                    <Icon name="arrow-right" size={16} />
                   </button>
                 </div>
 

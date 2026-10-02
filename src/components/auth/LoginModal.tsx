@@ -3,7 +3,7 @@ import supabase from "../../config/supabaseClient";
 import Overlay from "../common/Overlay";
 import Field from "../common/Field";
 import ModalHeader from "../common/ModalHeader";
-import { signInWithGoogle } from "../../services/authService";
+import { ensureUserInfo, signInWithGoogle } from "../../services/authService";
 
 export default function LoginModal({ onClose, onSwitch, onLogin }: { onClose: () => void; onSwitch: () => void; onLogin: (userId: string) => void }) {
   const [emailInput, setEmailInput]       = useState("");
@@ -28,6 +28,14 @@ export default function LoginModal({ onClose, onSwitch, onLogin }: { onClose: ()
     }
 
     if (data.user) {
+      try {
+        await ensureUserInfo(data.user);
+      } catch (profileError: any) {
+        setErrorMsg(profileError?.message || "Your account could not be initialized.");
+        setLoading(false);
+        return;
+      }
+
       setLoading(false);
       onLogin(data.user.id); // Pass the authenticated user ID to App
       onClose();  // Closes the modal
