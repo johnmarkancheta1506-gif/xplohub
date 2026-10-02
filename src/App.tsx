@@ -59,6 +59,8 @@ import MyTripsScreen from "./components/travel/MyTripsScreen";
 import SearchHistoryModal from "./components/search/SearchHistoryModal";
 import UserProfileModal from "./components/profile/UserProfileModal";
 import LandingPage from "./components/landing/LandingPage";
+import DestinationDetailsScreen from "./components/destination/DestinationDetailsScreen";
+import { getDestinationImage } from "./data/destinationImages";
 
 console.log("APP.TSX LOADED");
 console.log("SUPABASE FROM APP:", supabase);
@@ -2112,7 +2114,7 @@ const Modals = () => (
                 return (
                   <button key={d.Destination_ID} onClick={() => pickDest(d)} className="group bg-white rounded-2xl overflow-hidden text-left border border-slate-100 hover:border-slate-200 hover:shadow-xl transition-all duration-200 hover:-translate-y-0.5">
                     <div className={`${CAT_COLOR[activeCat.Category_Type].card} h-28 relative overflow-hidden flex items-end p-4`}>
-                      <img src={d.Destination_Image} alt={d.Destination_Name} className="absolute inset-0 w-full h-full object-cover opacity-20 group-hover:opacity-35 transition-opacity duration-300" />
+                      <img src={getDestinationImage(d)} alt={d.Destination_Name} className="absolute inset-0 w-full h-full object-cover opacity-20 group-hover:opacity-35 transition-opacity duration-300" />
                       <span className="text-[9px] font-bold tracking-[0.18em] uppercase text-white/80 relative z-10">{activeCat.Category_Type}</span>
                     </div>
                     <div className="p-4">
@@ -2138,171 +2140,39 @@ const Modals = () => (
   // ── Destination Detail ────────────────────────────────────────────────────────
 
   if (screen === "destination" && dest && destCat && city && country) return (
-    <div className="min-h-screen bg-[#f7f8fa]">
-      <Navbar />
-      {modal === "menu" && <div className="fixed inset-0 z-40" onClick={() => setModal(null)} />}
-
-      <div className="relative h-72 md:h-[380px] bg-slate-800 overflow-hidden mt-14">
-        <img src={dest.Destination_Image} alt={dest.Destination_Name} className="w-full h-full object-cover" />
-        <div className="absolute inset-0 bg-gradient-to-t from-[#0b1f5c]/90 via-[#0b1f5c]/30 to-transparent" />
-        <div className="absolute bottom-0 left-0 right-0 max-w-5xl mx-auto px-5 pb-7">
-          <p className="text-[11px] font-bold tracking-wider uppercase mb-3" style={{ color: "#fb923c" }}>
-            <button onClick={() => go("countries")} className="hover:underline">{country.Country_Name}</button>
-            {" / "}
-            <button onClick={() => go("cities")} className="hover:underline">{city.City_Name}</button>
-            {" / "}
-            <button onClick={() => go("city")} className="hover:underline">{destCat.Category_Name}</button>
-          </p>
-          <span className={`text-[10px] font-bold uppercase tracking-wider px-3 py-1 rounded-full mb-3 inline-block ${CAT_COLOR[destCat.Category_Type].badge}`}><CategoryIcon type={destCat.Category_Type} size={13} className="mr-1 inline-block align-[-2px]" />{destCat.Category_Type}</span>
-          <h1 className="text-3xl md:text-4xl font-extrabold text-white mt-2" style={{ fontFamily: "Outfit, sans-serif" }}>{dest.Destination_Name}</h1>
-        </div>
-      </div>
-
-      <div className="max-w-5xl mx-auto px-5 pb-20">
-        {/* Back button */}
-        <div className="pt-5 mb-2">
-          <BackBtn onClick={() => go("city")} label={`Back to ${city.City_Name}`} />
-        </div>
-
-        {/* Quick facts */}
-        <div className="bg-white border border-slate-100 rounded-2xl px-6 py-4 mt-4 shadow-lg flex flex-wrap gap-6 mb-8">
-          {[
-            { icon: "location" as const, label: "Address",   val: dest.Address },
-            { icon: "phone" as const, label: "Contact",   val: dest.Contact_Number },
-            { icon: "clock" as const, label: "Hours",     val: dest.Operating_Hours },
-            { icon: "tag" as const, label: "Category",  val: destCat.Category_Name },
-            { icon: "hash" as const, label: "ID",        val: `D-${String(dest.Destination_ID).padStart(3,"0")}` },
-          ].map((f) => (
-            <div key={f.label} className="flex items-start gap-2">
-              <Icon name={f.icon} size={16} className="mt-0.5 shrink-0 text-slate-400" />
-              <div>
-                <div className="text-[10px] text-slate-400 uppercase tracking-wide">{f.label}</div>
-                <div className="text-sm font-semibold text-[#0b1f5c] max-w-44 truncate">{f.val}</div>
-              </div>
-            </div>
-          ))}
-        </div>
-
-        <div className="grid md:grid-cols-3 gap-6">
-          <div className="md:col-span-2 space-y-6">
-            {/* About */}
-            <div className="bg-white rounded-2xl border border-slate-100 p-6">
-              <h2 className="text-lg font-extrabold text-[#0b1f5c] mb-3" style={{ fontFamily: "Outfit, sans-serif" }}>About</h2>
-              <p className="text-slate-600 leading-relaxed text-sm">{dest.Destination_Description}</p>
-            </div>
-
-            {/* Reviews */}
-            <div className="bg-white rounded-2xl border border-slate-100 p-6">
-              <div className="flex items-center justify-between mb-5">
-                <h2 className="text-lg font-extrabold text-[#0b1f5c]" style={{ fontFamily: "Outfit, sans-serif" }}>
-                  Reviews <span className="text-sm font-normal text-slate-400">({destReviews.length})</span>
-                </h2>
-                {isLoggedIn
-                  ? <button onClick={() => setModal("review")} className="text-xs font-semibold bg-[#0b1f5c] text-white px-4 py-2 rounded-xl hover:bg-[#162d7a]">+ Write Review</button>
-                  : <button onClick={() => setModal("register")} className="text-xs font-semibold border border-slate-200 text-slate-600 px-4 py-2 rounded-xl hover:bg-slate-50">Sign in to review</button>
-                }
-              </div>
-              {destReviews.length === 0 ? (
-                <div className="py-10 text-center text-slate-400"><Icon name="notes" size={30} className="mx-auto mb-3" /><p className="text-sm">No reviews yet. Be the first!</p></div>
-              ) : (
-                <div className="space-y-4">
-                  {destReviews.map((r) => {
-                    const isOwnReview =
-                      isLoggedIn &&
-                      currentUserId !== null &&
-                      r.user_id === currentUserId;
-
-                    return (
-                    <div key={r.Review_ID} className="border border-slate-100 rounded-xl p-5">
-                      <div className="flex items-start gap-3 mb-3">
-                        <img src={r.reviewer_avatar} alt={r.reviewer_name} className="w-10 h-10 rounded-full object-cover flex-shrink-0" />
-                        <div className="flex-1">
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <span className="font-semibold text-[#0b1f5c] text-sm">{r.reviewer_name}</span>
-                            <span className={`text-[9px] font-bold uppercase px-2 py-0.5 rounded-full ${r.Review_Status === "Approved" ? "bg-green-100 text-green-700" : "bg-amber-100 text-amber-700"}`}>{r.Review_Status}</span>
-                          </div>
-                          <div className="text-xs text-slate-400">{r.Review_Date}</div>
-                        </div>
-                        <div className="flex items-center gap-3">
-                          <Stars n={r.Rating} />
-                          {isOwnReview && (
-                            <div className="flex items-center gap-2">
-                              <button
-                                onClick={() => setEditingReview(r)}
-                                className="text-xs font-semibold text-blue-600 hover:text-blue-800"
-                              >
-                                Edit
-                              </button>
-                              <button
-                                onClick={async () => {
-                                  if (!window.confirm("Are you sure you want to delete your review?")) return;
-                                  try {
-                                    await deleteReviewFromSupabase(r);
-                                    setLiveReviews((prev) => ({
-                                      ...prev,
-                                      [dest.Destination_ID]: (prev[dest.Destination_ID] ?? []).filter(
-                                        (item) => item.Review_ID !== r.Review_ID
-                                      ),
-                                    }));
-                                    alert("Review deleted successfully!");
-                                  } catch (error: any) {
-                                    alert(error.message || "Failed to delete review.");
-                                  }
-                                }}
-                                className="text-xs font-semibold text-red-500 hover:text-red-700"
-                              >
-                                Delete
-                              </button>
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                      <p className="text-sm text-slate-600 mb-3">"{r.Review_Comment}"</p>
-                      <div className="bg-slate-50 rounded-lg p-3">
-                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1"><CategoryIcon type={destCat.Category_Type} size={13} className="mr-1 inline-block align-[-2px]" />{destCat.Category_Type} · {r.subtype_rating}/5</p>
-                        <p className="text-xs text-slate-500">{r.subtype_feedback}</p>
-                      </div>
-                    </div>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* Sidebar */}
-          <div className="space-y-4">
-            <div className="bg-[#0b1f5c] rounded-2xl p-5 text-white">
-              <h3 className="font-extrabold text-base mb-1" style={{ fontFamily: "Outfit, sans-serif" }}>Add to Travel Plan</h3>
-              <p className="text-white/50 text-xs mb-4">Save this destination to your personal itinerary.</p>
-              {isLoggedIn
-                ? <button onClick={() => setModal("plan")} className="w-full bg-white text-[#0b1f5c] font-semibold py-2.5 rounded-xl hover:bg-slate-100 text-sm">+ Save to Plan</button>
-                : <button onClick={() => setModal("register")} className="w-full bg-white text-[#0b1f5c] font-semibold py-2.5 rounded-xl text-sm">Sign in to save</button>
-              }
-            </div>
-
-            <div className="bg-white rounded-2xl border border-slate-100 p-5">
-              <h3 className="font-bold text-[#0b1f5c] text-sm mb-3" style={{ fontFamily: "Outfit, sans-serif" }}>More in {city.City_Name}</h3>
-              <div className="space-y-2">
-                {destsForCity.filter((d) => d.Destination_ID !== dest.Destination_ID).slice(0,4).map((d) => {
-                  const c = CATEGORIES.find((cat) => cat.Category_ID === d.Category_ID)!;
-                  return (
-                    <button key={d.Destination_ID} onClick={() => pickDest(d)} className="w-full flex items-center gap-3 p-2.5 rounded-xl hover:bg-slate-50 text-left transition-colors">
-                      <img src={d.Destination_Image} alt={d.Destination_Name} className="w-10 h-10 rounded-lg object-cover flex-shrink-0" />
-                      <div className="min-w-0">
-                        <div className="text-xs font-semibold text-[#0b1f5c] truncate">{d.Destination_Name}</div>
-                        <div className="text-[10px] text-slate-400"><CategoryIcon type={c.Category_Type} size={13} className="mr-1 inline-block align-[-2px]" />{c.Category_Type}</div>
-                      </div>
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-      <Modals />
-    </div>
+    <DestinationDetailsScreen
+      dest={dest}
+      destCat={destCat}
+      country={country}
+      city={city}
+      destReviews={destReviews}
+      destsForCity={destsForCity}
+      isLoggedIn={isLoggedIn}
+      currentUserId={currentUserId}
+      onBack={() => go("city")}
+      onRegister={() => setModal("register")}
+      onWriteReview={() => setModal("review")}
+      onOpenPlan={() => setModal("plan")}
+      onPickDestination={pickDest}
+      onEditReview={setEditingReview}
+      onDeleteReview={async (review) => {
+        if (!window.confirm("Are you sure you want to delete your review?")) return;
+        try {
+          await deleteReviewFromSupabase(review);
+          setLiveReviews((prev) => ({
+            ...prev,
+            [dest.Destination_ID]: (prev[dest.Destination_ID] ?? []).filter(
+              (item) => item.Review_ID !== review.Review_ID
+            ),
+          }));
+          alert("Review deleted successfully!");
+        } catch (error: any) {
+          alert(error.message || "Failed to delete review.");
+        }
+      }}
+      Navbar={Navbar}
+      Modals={Modals}
+    />
   );
 
   // ── Travel Plans ──────────────────────────────────────────────────────────────
@@ -2424,7 +2294,7 @@ const Modals = () => (
         );
         setPartnerData(savedPartner);
       }}
-      onDelete={async (business) => {
+      onDelete={async (business: BusinessPartner) => {
         if (!business.partnerId) {
           throw new Error("This business does not have a valid partner ID.");
         }
