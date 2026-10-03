@@ -1,6 +1,7 @@
-import type { ComponentType } from "react";
+import { useMemo, useState } from "react";
 import type { Destination } from "../../types";
 import { Icon } from "../common/Icon";
+import { getPlaceImage } from "../../data/placeImages";
 
 type TravelPlanRecord = {
   travelplan_id: number | string;
@@ -75,6 +76,13 @@ function formatBudget(value?: number | null) {
   })}`;
 }
 
+function getOverallBudget(plan: TravelPlanRecord) {
+  const match = String(plan.notes ?? "").match(/Overall itinerary budget target:\s*₱([\d,]+)/i);
+  if (!match) return null;
+  const amount = Number(match[1].replace(/,/g, ""));
+  return Number.isFinite(amount) ? amount : null;
+}
+
 function initials(value: string) {
   return value
     .split(/\s+/)
@@ -89,29 +97,36 @@ export default function MyTripsScreen({
   destinations,
   onBack,
   onExplore,
+  onGenerateItinerary,
   onEdit,
   onDelete,
   onOpenDestination,
-  Modals,
 }: {
   plans: TravelPlanRecord[];
   destinations: Destination[];
   onBack: () => void;
   onExplore: () => void;
+  onGenerateItinerary: () => void;
   onEdit: (plan: TravelPlanRecord) => void;
   onDelete: (plan: TravelPlanRecord) => Promise<void>;
   onOpenDestination: (destination: Destination) => void;
-  Modals: ComponentType;
 }) {
+  const [activeTab, setActiveTab] = useState<"All" | "Planned" | "Ongoing" | "Completed">("All");
+
   const total = plans.length;
   const upcoming = plans.filter((plan) => plan.travel_status === "Planned").length;
   const ongoing = plans.filter((plan) => plan.travel_status === "Ongoing").length;
   const completed = plans.filter((plan) => plan.travel_status === "Completed").length;
 
+  const filteredPlans = useMemo(() => {
+    if (activeTab === "All") return plans;
+    return plans.filter((plan) => plan.travel_status === activeTab);
+  }, [activeTab, plans]);
+
   return (
     <div className="min-h-screen bg-[#f7f8fa] text-slate-800">
       <div className="pt-20 pb-16">
-        <div className="max-w-6xl mx-auto px-5 sm:px-6 lg:px-8">
+        <div className="mx-auto max-w-7xl px-5 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between gap-4 py-7">
             <button
               onClick={onBack}
@@ -121,13 +136,22 @@ export default function MyTripsScreen({
               Explore
             </button>
 
-            <button
-              onClick={onExplore}
-              className="hidden sm:inline-flex items-center gap-2 rounded-full bg-[#0b1f5c] px-5 py-2.5 text-sm font-bold text-white shadow-sm hover:bg-[#162d7a] transition-colors"
-            >
-              <span className="text-base">+</span>
-              Add destination
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={onGenerateItinerary}
+                className="hidden sm:inline-flex items-center gap-2 rounded-full border border-[#0b1f5c]/15 bg-white px-5 py-2.5 text-sm font-bold text-[#0b1f5c] shadow-sm transition hover:-translate-y-0.5 hover:border-[#0b1f5c]/30 hover:bg-slate-50"
+              >
+                <Icon name="spark" size={15} />
+                Generate itinerary
+              </button>
+              <button
+                onClick={onExplore}
+                className="hidden sm:inline-flex items-center gap-2 rounded-full bg-[#0b1f5c] px-5 py-2.5 text-sm font-bold text-white shadow-sm transition hover:-translate-y-0.5 hover:bg-[#162d7a]"
+              >
+                <span className="text-base">+</span>
+                Add destination
+              </button>
+            </div>
           </div>
 
           <section className="overflow-hidden rounded-[28px] bg-[#0b1f5c] shadow-[0_20px_55px_rgba(11,31,92,0.18)]">
@@ -166,19 +190,34 @@ export default function MyTripsScreen({
 
             <div className="grid grid-cols-2 border-t border-white/10 sm:grid-cols-4">
               {[
-                ["All trips", total],
+                ["All", total],
                 ["Planned", upcoming],
                 ["Ongoing", ongoing],
                 ["Completed", completed],
-              ].map(([label, value], index) => (
-                <div
-                  key={label}
-                  className={`px-5 py-4 ${index > 0 ? "border-l border-white/10" : ""}`}
-                >
-                  <div className="text-[11px] font-semibold uppercase tracking-wider text-white/45">{label}</div>
-                  <div className="mt-1 text-base font-bold text-white">{value}</div>
-                </div>
-              ))}
+              ].map(([label, value]) => {
+                const tab = label as "All" | "Planned" | "Ongoing" | "Completed";
+                const isActive = activeTab === tab;
+
+                return (
+                  <button
+                    key={label}
+                    type="button"
+                    onClick={() => setActiveTab(tab)}
+                    aria-pressed={isActive}
+                    className={`relative px-5 py-4 text-left transition-colors hover:bg-white/5 focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-sky-300 ${
+                      tab !== "All" ? "border-l border-white/10" : ""
+                    }`}
+                  >
+                    <div className={`text-[11px] font-semibold uppercase tracking-wider ${isActive ? "text-sky-300" : "text-white/45"}`}>
+                      {label === "All" ? "All trips" : label}
+                    </div>
+                    <div className="mt-1 text-base font-bold text-white">{value}</div>
+                    {isActive && (
+                      <span className="absolute inset-x-5 bottom-0 h-0.5 rounded-full bg-sky-300" />
+                    )}
+                  </button>
+                );
+              })}
             </div>
           </section>
 
@@ -189,17 +228,26 @@ export default function MyTripsScreen({
                 className="mt-1 text-2xl font-extrabold text-[#0b1f5c]"
                 style={{ fontFamily: "Outfit, sans-serif" }}
               >
-                Saved trips
+                {activeTab === "All" ? "Saved trips" : `${activeTab} trips`}
               </h2>
             </div>
-            {total > 0 && (
-              <div className="hidden text-sm font-medium text-slate-400 sm:block">
-                {total} {total === 1 ? "trip" : "trips"} saved
-              </div>
-            )}
+            <div className="flex items-center gap-3">
+              <button
+                onClick={onGenerateItinerary}
+                className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-white px-3.5 py-2 text-xs font-bold text-[#0b1f5c] shadow-sm transition hover:-translate-y-0.5 hover:border-slate-300 hover:bg-slate-50 sm:hidden"
+              >
+                <Icon name="spark" size={13} />
+                Generate
+              </button>
+              {filteredPlans.length > 0 && (
+                <div className="hidden text-sm font-medium text-slate-400 sm:block">
+                  {filteredPlans.length} {filteredPlans.length === 1 ? "trip" : "trips"} {activeTab === "All" ? "saved" : `in ${activeTab.toLowerCase()}`}
+                </div>
+              )}
+            </div>
           </div>
 
-          {plans.length === 0 ? (
+          {filteredPlans.length === 0 ? (
             <section className="mt-5 overflow-hidden rounded-[26px] border border-slate-200 bg-white shadow-sm">
               <div className="grid items-center gap-8 p-7 sm:p-10 lg:grid-cols-[1.1fr_0.9fr] lg:p-12">
                 <div>
@@ -208,11 +256,12 @@ export default function MyTripsScreen({
                     className="mt-5 text-2xl font-extrabold text-[#0b1f5c]"
                     style={{ fontFamily: "Outfit, sans-serif" }}
                   >
-                    Your next adventure starts here.
+                    {activeTab === "All" ? "Your next adventure starts here." : `No ${activeTab.toLowerCase()} trips yet.`}
                   </h3>
                   <p className="mt-2 max-w-lg text-sm leading-6 text-slate-500">
-                    Explore TravelMate, open a destination you love, and save it to
-                    your first trip. Your plans will appear here as you build them.
+                    {activeTab === "All"
+                      ? "Explore TravelMate, open a destination you love, and save it to your first trip. Your plans will appear here as you build them."
+                      : `You don't have any ${activeTab.toLowerCase()} travel plans right now. Choose another tab or create a new trip.`}
                   </p>
                   <button
                     onClick={onExplore}
@@ -242,7 +291,24 @@ export default function MyTripsScreen({
             </section>
           ) : (
             <div className="mt-5 space-y-5">
-              {plans.map((plan, index) => {
+              {[...filteredPlans]
+                .map((plan, originalIndex) => ({ plan, originalIndex }))
+                .sort((a, b) => {
+                  const dayNumber = (value?: string | null) => {
+                    const match = String(value ?? "").match(/(?:^|[\s·-])day\s+(\d+)/i);
+                    return match ? Number(match[1]) : null;
+                  };
+
+                  const aDay = dayNumber(a.plan.plan_name);
+                  const bDay = dayNumber(b.plan.plan_name);
+
+                  // Generated itineraries should always read Day 1 → Day 2 → Day 3.
+                  if (aDay !== null && bDay !== null) return aDay - bDay;
+                  if (aDay !== null) return -1;
+                  if (bDay !== null) return 1;
+                  return a.originalIndex - b.originalIndex;
+                })
+                .map(({ plan }, index) => {
                 const destination = destinations.find(
                   (item) => item.Destination_ID === Number(plan.destination_id)
                 );
@@ -263,19 +329,42 @@ export default function MyTripsScreen({
                         disabled={!destination}
                         className="relative min-h-[220px] overflow-hidden bg-slate-200 text-left disabled:cursor-default"
                       >
-                        {destination?.Destination_Image ? (
+                        {destination ? (
                           <img
-                            src={destination.Destination_Image}
+                            src={getPlaceImage(
+                              destination.Destination_Name,
+                              destination.Destination_ID,
+                              destination.Place_Type_ID === 1
+                                ? "Restaurant"
+                                : destination.Place_Type_ID === 2
+                                  ? "Accommodation"
+                                  : destination.Place_Type_ID === 3
+                                    ? "Convenience Store"
+                                    : destination.Place_Type_ID === 4
+                                      ? "Landmark"
+                                      : "Tourist Destination",
+                              destination.Destination_Image
+                            )}
                             alt={destination.Destination_Name}
                             className="absolute inset-0 h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
+                            onError={(event) => {
+                              event.currentTarget.onerror = null;
+                              event.currentTarget.src = "https://images.unsplash.com/photo-1503079230625-8a7c589a9007?w=900&h=600&fit=crop&auto=format";
+                            }}
                           />
                         ) : (
                           <div className="absolute inset-0 bg-gradient-to-br from-[#0b1f5c] via-[#173b9a] to-sky-300" />
                         )}
                         <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/15 to-transparent" />
-                        <div className="absolute left-5 top-5 rounded-full bg-white/90 px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.15em] text-[#0b1f5c] backdrop-blur-sm">
-                          Trip {String(index + 1).padStart(2, "0")}
-                        </div>
+                        {(() => {
+                          const dayMatch = String(plan.plan_name ?? "").match(/(?:^|[\s·-])day\s+(\d+)/i);
+                          const tripNumber = dayMatch ? Number(dayMatch[1]) : index + 1;
+                          return (
+                            <div className="absolute left-5 top-5 rounded-full bg-white/90 px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.15em] text-[#0b1f5c] backdrop-blur-sm">
+                              Trip {String(tripNumber).padStart(2, "0")}
+                            </div>
+                          );
+                        })()}
                         <div className="absolute bottom-5 left-5 right-5">
                           <div className="text-xl font-extrabold text-white" style={{ fontFamily: "Outfit, sans-serif" }}>
                             {destination?.Destination_Name ?? plan.destination_name ?? "Destination"}
@@ -326,7 +415,7 @@ export default function MyTripsScreen({
                           </div>
                           <div className="rounded-2xl border border-slate-100 bg-slate-50 p-4">
                             <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Budget</div>
-                            <div className="mt-2 text-sm font-bold text-[#0b1f5c]">{formatBudget(plan.budget)}</div>
+                            <div className="mt-2 text-sm font-bold text-[#0b1f5c]">{formatBudget(getOverallBudget(plan) ?? plan.budget)}</div>
                           </div>
                         </div>
 
@@ -386,7 +475,6 @@ export default function MyTripsScreen({
           </button>
         </div>
       </div>
-      <Modals />
     </div>
   );
 }

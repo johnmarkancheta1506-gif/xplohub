@@ -2,6 +2,7 @@ import { COUNTRIES } from "../../data/countries";
 import { CITIES } from "../../data/cities";
 import { DESTINATIONS } from "../../data/destinations";
 import { REVIEWS } from "../../data/reviews";
+import { getCityImage } from "../../data/cityImages";
 
 type Props = {
   onLogin: () => void;
@@ -312,7 +313,7 @@ export default function LandingPage({ onLogin, onRegister }: Props) {
             <div className="mt-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
               {cities.map((city) => (
                 <button key={city.City_ID} onClick={onRegister} className="group overflow-hidden rounded-2xl border border-slate-200 bg-white text-left transition hover:-translate-y-0.5 hover:shadow-lg">
-                  <img src={city.City_Image} alt={city.City_Name} className="h-40 w-full object-cover transition duration-500 group-hover:scale-[1.03]" />
+                  <img src={getCityImage(city)} alt={city.City_Name} className="h-40 w-full object-cover transition duration-500 group-hover:scale-[1.03]" />
                   <div className="p-4">
                     <h3 className="text-sm font-extrabold text-[#0b1f5c]">{city.City_Name}</h3>
                     <p className="mt-1 text-[11px] font-semibold text-slate-400">{city.City_Specialty}</p>

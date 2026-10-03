@@ -43,7 +43,7 @@ export default function LoginModal({ onClose, onSwitch, onLogin }: { onClose: ()
   };
 
   return (
-    <Overlay onClose={onClose}>
+    <Overlay onClose={onClose} contentClassName="max-w-lg">
       <ModalHeader title="Sign In" onClose={onClose} />
       <div className="px-6 pb-6 pt-3 space-y-3">
         {errorMsg && (

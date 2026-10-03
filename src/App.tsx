@@ -33,6 +33,8 @@ import { COUNTRIES } from "./data/countries";
 import { CITIES } from "./data/cities";
 import { DESTINATIONS } from "./data/destinations";
 import { REVIEWS } from "./data/reviews";
+import { getPlaceImage } from "./data/placeImages";
+import { getCityImage } from "./data/cityImages";
 
 import Stars from "./components/common/Stars";
 import BackBtn from "./components/common/BackBtn";
@@ -53,20 +55,22 @@ import WriteReviewModal from "./components/reviews/WriteReviewModal";
 import EditReviewModal from "./components/reviews/EditReviewModal";
 
 import EditTravelPlanModal from "./components/travel/EditTravelPlanModal";
+import ItineraryGeneratorModal from "./components/travel/ItineraryGeneratorModal";
 import SavePlanModal from "./components/travel/SavePlanModal";
 import MyTripsScreen from "./components/travel/MyTripsScreen";
 
 import SearchHistoryModal from "./components/search/SearchHistoryModal";
 import UserProfileModal from "./components/profile/UserProfileModal";
 import LandingPage from "./components/landing/LandingPage";
-import DestinationDetailsScreen from "./components/destination/DestinationDetailsScreen";
-import { getDestinationImage } from "./data/destinationImages";
+import DestinationDetailScreen from "./components/destination/DestinationDetailScreen";
+import { checkReviewEligibility, type ReviewEligibility } from "./services/reviewEligibility";
+import { getAvatarPublicUrl, getStoredAvatarPublicUrl } from "./services/avatarService";
 
 console.log("APP.TSX LOADED");
 console.log("SUPABASE FROM APP:", supabase);
 
 type Screen = "countries" | "cities" | "city" | "destination" | "plans" | "partner-businesses" | "partner-dashboard";
-type ModalKind = "register" | "login" | "partner" | "review" | "plan" | "profile" | "menu" | null;
+type ModalKind = "register" | "login" | "partner" | "review" | "plan" | "profile" | "menu" | "itinerary" | null;
 
 // Popular Cities showcase order: live cities first, coming-soon cities after.
 const POPULAR_CITY_IDS = [3, 5, 1, 4, 2, 6, 7, 8];
@@ -74,6 +78,7 @@ const POPULAR_CITY_IDS = [3, 5, 1, 4, 2, 6, 7, 8];
 function getAuthAvatar(user: any): string | null {
   const identity = user?.identities?.find((item: any) => item?.provider === "google");
   return user?.user_metadata?.avatar_url
+    || getAvatarPublicUrl(user?.user_metadata?.avatar_path)
     || user?.user_metadata?.picture
     || user?.user_metadata?.avatar
     || identity?.identity_data?.picture
@@ -85,8 +90,24 @@ function getAuthGender(user: any): "Male" | "Female" | null {
   return gender === "Male" || gender === "Female" ? gender : null;
 }
 
-function syncAuthProfileMeta(user: any, setAvatar: (value: string | null) => void, setGender: (value: "Male" | "Female" | null) => void) {
-  setAvatar(getAuthAvatar(user));
+async function syncAuthProfileMeta(user: any, setAvatar: (value: string | null) => void, setGender: (value: "Male" | "Female" | null) => void) {
+  if (!user) {
+    setAvatar(null);
+    setGender(null);
+    return;
+  }
+
+  // Prefer the user's uploaded Storage avatar even if a Google OAuth refresh
+  // has replaced the provider metadata with Google's profile picture.
+  const metadataAvatar = getAuthAvatar(user);
+  const storedAvatar = await getStoredAvatarPublicUrl(user.id);
+  const googleIdentity = user?.identities?.find((item: any) => item?.provider === "google");
+  const googleAvatar = user?.user_metadata?.picture
+    || user?.user_metadata?.avatar
+    || googleIdentity?.identity_data?.picture
+    || null;
+
+  setAvatar(storedAvatar || metadataAvatar || googleAvatar);
   setGender(getAuthGender(user));
 }
 
@@ -116,6 +137,10 @@ export default function App() {
   const [dbTravelPlans, setDbTravelPlans] = useState<any[]>([]);
   const [editingPlan, setEditingPlan] = useState<any | null>(null);
   const [editingReview, setEditingReview] = useState<ReviewEntry | null>(null);
+  const [reviewEligibility, setReviewEligibility] = useState<ReviewEligibility>({
+    eligible: false,
+    reason: "Complete a Travel Plan for this destination before leaving a review.",
+  });
   const [isPartner, setIsPartner] = useState(false);
   const [partnerBusinesses, setPartnerBusinesses] = useState<BusinessPartner[]>([]);
   const [partnerData, setPartnerData] = useState<BusinessPartner | null>(null);
@@ -148,7 +173,7 @@ export default function App() {
 
       setIsLoggedIn(true);
       setCurrentUserId(session.user.id);
-      syncAuthProfileMeta(session.user, setCurrentUserAvatar, setCurrentUserGender);
+      void syncAuthProfileMeta(session.user, setCurrentUserAvatar, setCurrentUserGender);
 
       console.log("Session restored:", session.user.id);
     } else {
@@ -174,7 +199,7 @@ export default function App() {
     if (session?.user) {
       setIsLoggedIn(true);
       setCurrentUserId(session.user.id);
-      syncAuthProfileMeta(session.user, setCurrentUserAvatar, setCurrentUserGender);
+      void syncAuthProfileMeta(session.user, setCurrentUserAvatar, setCurrentUserGender);
     } else {
       setIsLoggedIn(false);
       setCurrentUserId(null);
@@ -196,21 +221,19 @@ useEffect(() => {
 
   const loadCurrentUserName = async () => {
     const { data: authData } = await supabase.auth.getUser();
-    syncAuthProfileMeta(authData.user, setCurrentUserAvatar, setCurrentUserGender);
+    if (!authData.user) return;
 
-    const { data, error } = await supabase
-      .from("USER_INFO")
-      .select("full_name")
-      .eq("user_id", currentUserId)
-      .single();
+    void syncAuthProfileMeta(authData.user, setCurrentUserAvatar, setCurrentUserGender);
 
-    if (error) {
-      console.error("USER_INFO current user load error:", error);
-      setCurrentUserName(authData.user?.user_metadata?.full_name ?? authData.user?.user_metadata?.name ?? "");
-      return;
+    try {
+      // USER_INFO is the application's profile source of truth. Google/Auth
+      // metadata is only a fallback for accounts that do not have profile data.
+      const ensuredProfile = await ensureUserInfo(authData.user);
+      setCurrentUserName(ensuredProfile?.full_name ?? authData.user.user_metadata?.full_name ?? authData.user.user_metadata?.name ?? "");
+    } catch (ensureError) {
+      console.error("USER_INFO current user load error:", ensureError);
+      setCurrentUserName(authData.user.user_metadata?.full_name ?? authData.user.user_metadata?.name ?? "");
     }
-
-    setCurrentUserName(data?.full_name ?? authData.user?.user_metadata?.full_name ?? authData.user?.user_metadata?.name ?? "");
   };
 
   loadCurrentUserName();
@@ -379,6 +402,28 @@ useEffect(() => {
     }
   };
 
+  useEffect(() => {
+    let cancelled = false;
+
+    if (!currentUserId || !dest) {
+      setReviewEligibility({
+        eligible: false,
+        reason: currentUserId
+          ? "Complete a Travel Plan for this destination before leaving a review."
+          : "Sign in to review this place.",
+      });
+      return;
+    }
+
+    const loadReviewEligibility = async () => {
+      const result = await checkReviewEligibility(currentUserId, dest.Destination_ID);
+      if (!cancelled) setReviewEligibility(result);
+    };
+
+    loadReviewEligibility();
+    return () => { cancelled = true; };
+  }, [currentUserId, dest?.Destination_ID]);
+
   const saveReviewToSupabase = async (
   review: ReviewEntry,
   dest: Destination,
@@ -393,6 +438,14 @@ useEffect(() => {
 
     if (userError || !user) {
       throw new Error("You must be logged in to write a review.");
+    }
+
+    // Mission 4 review rule: a user may submit a review only after
+    // completing a Travel Plan for this exact destination. This is checked
+    // again at save time so the rule is not only a UI restriction.
+    const eligibility = await checkReviewEligibility(user.id, dest.Destination_ID);
+    if (!eligibility.eligible) {
+      throw new Error(eligibility.reason);
     }
 
     // 2. Make sure this user exists in USER_INFO
@@ -1157,7 +1210,7 @@ useEffect(() => {
       Destination_Image:
         item.destination_image ??
         'https://images.unsplash.com/photo-1503079230625-8a7c589a9007?w=600&h=400&fit=crop&auto=format',
-      Rating: Number(item.rating ?? 4.5)
+      Rating: Number(item.rating ?? 4.5),
     }));
 
     console.log("DESTINATION formatted data:", formatted);
@@ -1222,7 +1275,98 @@ function pickCity(c: City) {
   go("city");
 }
 
-  function pickDest(d: Destination) { setDest(d); go("destination"); }
+  async function pickDest(d: Destination) {
+    // Always prefer the canonical live destination record.
+    const canonicalDestination =
+      dbDestinations.find((item) => normId(item.Destination_ID) === normId(d.Destination_ID)) ??
+      DESTINATIONS.find((item) => normId(item.Destination_ID) === normId(d.Destination_ID)) ??
+      d;
+
+    setDest(canonicalDestination);
+
+    // Resolve the city directly from the live CITY table when possible.
+    // This is important when opening a destination from My Trips because the
+    // current screen may not have the previously selected city in React state.
+    let dbCity = dbCities.find((item: any) =>
+      normId(item.city_id ?? item.City_ID) === normId(canonicalDestination.City_ID)
+    );
+
+    if (!dbCity && canonicalDestination.City_ID) {
+      const { data: fetchedCity } = await supabase
+        .from("CITY")
+        .select("*")
+        .eq("city_id", canonicalDestination.City_ID)
+        .maybeSingle();
+      dbCity = fetchedCity ?? null;
+    }
+
+    const normalizeCityName = (value: unknown) =>
+      String(value ?? "")
+        .trim()
+        .toLowerCase()
+        .replace(/\s+city$/, "");
+
+    const dbCityName = normalizeCityName(dbCity?.city_name ?? dbCity?.City_Name);
+    const destinationCity =
+      CITIES.find((item) => normalizeCityName(item.City_Name) === dbCityName) ??
+      CITIES.find((item) => normId(item.City_ID) === normId(canonicalDestination.City_ID)) ??
+      null;
+
+    // Resolve the country from the resolved city instead of reusing a stale
+    // country selection from another screen.
+    let resolvedCountry: Country | null = null;
+    if (destinationCity) {
+      resolvedCountry = COUNTRIES.find(
+        (item) => normId(item.Country_ID) === normId(destinationCity.Country_ID)
+      ) ?? null;
+    }
+
+    if (!resolvedCountry && dbCity) {
+      const dbCountryId = dbCity.country_id ?? dbCity.Country_ID;
+      const dbCountry = dbCountries.find((item: any) =>
+        normId(item.country_id ?? item.Country_ID) === normId(dbCountryId)
+      );
+      const dbCountryName = String(dbCountry?.country_name ?? dbCountry?.Country_Name ?? "").trim().toLowerCase();
+      resolvedCountry = COUNTRIES.find(
+        (item) => item.Country_Name.trim().toLowerCase() === dbCountryName
+      ) ?? null;
+    }
+
+    // Place_Type_ID is supplied by the live child tables. If the record being
+    // opened doesn't have it yet, identify the destination from those same
+    // child tables before falling back to the existing category information.
+    let resolvedCategoryId = canonicalDestination.Place_Type_ID ?? null;
+
+    if (!resolvedCategoryId) {
+      const childChecks = [
+        { table: "RESTAURANT", typeId: 1 },
+        { table: "ACCOMMODATIONS", typeId: 2 },
+        { table: "CONVENIENCE_STORES", typeId: 3 },
+        { table: "LANDMARK", typeId: 4 },
+        { table: "TOURIST_DESTINATION", typeId: 5 },
+      ];
+
+      for (const child of childChecks) {
+        const { data: childRow } = await supabase
+          .from(child.table)
+          .select("destination_id")
+          .eq("destination_id", canonicalDestination.Destination_ID)
+          .maybeSingle();
+        if (childRow) {
+          resolvedCategoryId = child.typeId;
+          break;
+        }
+      }
+    }
+
+    if (!resolvedCategoryId) resolvedCategoryId = 5;
+
+    setActiveCatId(resolvedCategoryId);
+    if (destinationCity) setCity(destinationCity);
+    if (resolvedCountry) setCountry(resolvedCountry);
+
+    go("destination");
+  }
 
   const citiesForCountry = country ? CITIES.filter((c) => c.Country_ID === country.Country_ID) : [];
   const activeDestinations = dbDestinations;
@@ -1264,10 +1408,59 @@ function pickCity(c: City) {
 
   // Place_Type_ID controls the UI category. Category_ID remains the thematic
   // Supabase CATEGORY value and is not used to choose the five tabs.
-  const destCat = dest
-    ? CATEGORIES.find((c) => c.Category_ID === (dest.Place_Type_ID ?? dest.Category_ID)) ?? null
+  // Resolve destination-detail props defensively. This is especially important
+  // when opening a plan from My Trips: React may not yet have the surrounding
+  // city/category state from the previous screen, and older plans may reference
+  // a destination record whose UI place type is not present on the plan itself.
+  const destinationForScreen = dest
+    ? dbDestinations.find((item) => normId(item.Destination_ID) === normId(dest.Destination_ID)) ??
+      DESTINATIONS.find((item) => normId(item.Destination_ID) === normId(dest.Destination_ID)) ??
+      dest
     : null;
-  const destReviews      = dest ? [...(REVIEWS[dest.Destination_ID] ?? []), ...(liveReviews[dest.Destination_ID] ?? [])] : [];
+
+  const destinationDbCity = destinationForScreen
+    ? dbCities.find((item: any) =>
+        normId(item.city_id ?? item.City_ID) === normId(destinationForScreen.City_ID)
+      )
+    : null;
+
+  const destinationDbCityName = String(
+    destinationDbCity?.city_name ?? destinationDbCity?.City_Name ?? ""
+  ).trim().toLowerCase();
+
+  const normalizeCityNameForScreen = (value: unknown) =>
+    String(value ?? "")
+      .trim()
+      .toLowerCase()
+      .replace(/\s+city$/, "");
+
+  const destinationCity = destinationForScreen
+    ? CITIES.find((item) => normalizeCityNameForScreen(item.City_Name) === normalizeCityNameForScreen(destinationDbCityName)) ??
+      CITIES.find((item) => normId(item.City_ID) === normId(destinationForScreen.City_ID)) ??
+      (city && normId(city.City_ID) === normId(destinationForScreen.City_ID) ? city : null)
+    : null;
+
+  const destinationCountry = destinationCity
+    ? COUNTRIES.find((item) => normId(item.Country_ID) === normId(destinationCity.Country_ID)) ??
+      (country && normId(country.Country_ID) === normId(destinationCity.Country_ID) ? country : null)
+    : null;
+
+  const destinationPlaceTypeId = destinationForScreen
+    ? destinationForScreen.Place_Type_ID ??
+      dbDestinations.find((item) => normId(item.Destination_ID) === normId(destinationForScreen.Destination_ID))?.Place_Type_ID ??
+      null
+    : null;
+
+  const destCat = destinationPlaceTypeId
+    ? CATEGORIES.find((c) => c.Category_ID === Number(destinationPlaceTypeId)) ?? null
+    : null;
+
+  const destReviews = destinationForScreen
+    ? [
+        ...(REVIEWS[destinationForScreen.Destination_ID] ?? []),
+        ...(liveReviews[destinationForScreen.Destination_ID] ?? []),
+      ]
+    : [];
   const searchText = search.trim().toLowerCase();
   const shownCountries = COUNTRIES.filter((c) => {
     const countryMatches = !searchText || c.Country_Name.toLowerCase().includes(searchText);
@@ -1601,7 +1794,7 @@ const Modals = () => (
           setCurrentUserId(userId);
           setIsLoggedIn(true);
           const { data } = await supabase.auth.getUser();
-          syncAuthProfileMeta(data.user, setCurrentUserAvatar, setCurrentUserGender);
+          void syncAuthProfileMeta(data.user, setCurrentUserAvatar, setCurrentUserGender);
         }}
       />
     )}
@@ -1711,7 +1904,18 @@ const Modals = () => (
       />
     )}
 
-        {editingReview && dest && destCat && (
+        {modal === "itinerary" && (
+      <ItineraryGeneratorModal
+        countries={COUNTRIES}
+        cities={CITIES}
+        dbCities={dbCities}
+        destinations={dbDestinations}
+        onClose={() => setModal(null)}
+        onSaved={loadTravelPlans}
+      />
+    )}
+
+    {editingReview && dest && destCat && (
       <EditReviewModal
         review={editingReview}
         dest={dest}
@@ -1725,7 +1929,14 @@ const Modals = () => (
       <EditTravelPlanModal
         plan={editingPlan}
         onClose={() => setEditingPlan(null)}
-        onSaved={loadTravelPlans}
+        onSaved={async () => {
+          await loadTravelPlans();
+          if (dest && currentUserId) {
+            setReviewEligibility(
+              await checkReviewEligibility(currentUserId, dest.Destination_ID)
+            );
+          }
+        }}
       />
     )}
   </>
@@ -1920,7 +2131,7 @@ const Modals = () => (
                 const interactive = co.interactable;
                 const card = (
                   <div className={`group relative h-64 w-[230px] shrink-0 overflow-hidden rounded-3xl bg-slate-900 ring-1 ring-black/5 ${interactive ? "transition duration-300 hover:-translate-y-1 hover:shadow-2xl hover:shadow-slate-900/15" : "opacity-90"}`}>
-                    <img src={city.City_Image} alt={city.City_Name} className={`absolute inset-0 h-full w-full object-cover transition duration-700 ${interactive ? "group-hover:scale-105" : "grayscale-[15%]"}`} />
+                    <img src={getCityImage(city)} alt={city.City_Name} className={`absolute inset-0 h-full w-full object-cover transition duration-700 ${interactive ? "group-hover:scale-105" : "grayscale-[15%]"}`} />
                     <div className="absolute inset-0 bg-gradient-to-t from-[#020816] via-[#020816]/10 to-transparent" />
                     <div className="absolute left-4 top-4 flex items-center gap-2">
                       <span className="text-lg drop-shadow">{FLAGS[co.Country_ID]}</span>
@@ -2029,7 +2240,7 @@ const Modals = () => (
             return (
               <button key={c.City_ID} onClick={() => pickCity(c)} className="group bg-white rounded-2xl overflow-hidden text-left border border-slate-100 hover:border-blue-200 hover:shadow-xl hover:shadow-blue-50 transition-all duration-300 hover:-translate-y-0.5">
                 <div className="relative h-40 bg-slate-200 overflow-hidden">
-                  <img src={c.City_Image} alt={c.City_Name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
+                  <img src={getCityImage(c)} alt={c.City_Name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
                   <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
                   {cat && <span className={`absolute bottom-3 left-3 text-[10px] font-bold uppercase tracking-wider px-2.5 py-1 rounded-full ${CAT_COLOR[cat.Category_Type].badge}`}><CategoryIcon type={cat.Category_Type} size={13} className="mr-1 inline-block align-[-2px]" />{cat.Category_Type}</span>}
                 </div>
@@ -2113,9 +2324,10 @@ const Modals = () => (
                 const revCount = (REVIEWS[d.Destination_ID] ?? []).length;
                 return (
                   <button key={d.Destination_ID} onClick={() => pickDest(d)} className="group bg-white rounded-2xl overflow-hidden text-left border border-slate-100 hover:border-slate-200 hover:shadow-xl transition-all duration-200 hover:-translate-y-0.5">
-                    <div className={`${CAT_COLOR[activeCat.Category_Type].card} h-28 relative overflow-hidden flex items-end p-4`}>
-                      <img src={getDestinationImage(d)} alt={d.Destination_Name} className="absolute inset-0 w-full h-full object-cover opacity-20 group-hover:opacity-35 transition-opacity duration-300" />
-                      <span className="text-[9px] font-bold tracking-[0.18em] uppercase text-white/80 relative z-10">{activeCat.Category_Type}</span>
+                    <div className="h-36 relative overflow-hidden flex items-end p-4 bg-slate-200">
+                      <img src={getPlaceImage(d.Destination_Name, d.Destination_ID, activeCat.Category_Type, d.Destination_Image)} alt={d.Destination_Name} className="absolute inset-0 w-full h-full object-cover transition-transform duration-500 group-hover:scale-105" onError={(event) => { event.currentTarget.onerror = null; event.currentTarget.src = d.Destination_Image || "https://images.unsplash.com/photo-1503079230625-8a7c589a9007?w=900&h=600&fit=crop&auto=format"; }} />
+                      <div className="absolute inset-x-0 bottom-0 h-20 bg-gradient-to-t from-black/60 to-transparent" />
+                      <span className="relative z-10 rounded-full bg-white/95 px-2.5 py-1 text-[9px] font-bold tracking-[0.14em] uppercase text-[#0b1f5c] shadow-sm">{activeCat.Category_Type}</span>
                     </div>
                     <div className="p-4">
                       <h3 className="font-extrabold text-[#0b1f5c] text-sm mb-1 group-hover:text-blue-700 transition-colors leading-snug" style={{ fontFamily: "Outfit, sans-serif" }}>{d.Destination_Name}</h3>
@@ -2139,52 +2351,101 @@ const Modals = () => (
 
   // ── Destination Detail ────────────────────────────────────────────────────────
 
-  if (screen === "destination" && dest && destCat && city && country) return (
-    <DestinationDetailsScreen
-      dest={dest}
-      destCat={destCat}
-      country={country}
-      city={city}
-      destReviews={destReviews}
-      destsForCity={destsForCity}
+  if (screen === "destination" && destinationForScreen && destCat && destinationCity && destinationCountry) return (
+    <>
+      <Navbar />
+      <DestinationDetailScreen
+      destination={destinationForScreen}
+      category={destCat}
+      city={destinationCity}
+      country={destinationCountry}
+      reviews={destReviews}
       isLoggedIn={isLoggedIn}
       currentUserId={currentUserId}
-      onBack={() => go("city")}
-      onRegister={() => setModal("register")}
-      onWriteReview={() => setModal("review")}
-      onOpenPlan={() => setModal("plan")}
-      onPickDestination={pickDest}
-      onEditReview={setEditingReview}
+      relatedDestinations={destinationCity ? DESTINATIONS.filter((item) => normId(item.City_ID) === normId(destinationCity.City_ID)) : destsForCity}
+      onBack={() => { if (destinationCity && destinationCountry) { setCity(destinationCity); setCountry(destinationCountry); } go("city"); }}
+      onOpenReview={async () => {
+        if (!currentUserId || !destinationForScreen) {
+          setModal("register");
+          return;
+        }
+
+        // Re-check at click time so the review action always uses the latest
+        // Travel Plan state, even immediately after editing/completing a plan.
+        const latestEligibility = await checkReviewEligibility(
+          currentUserId,
+          destinationForScreen.Destination_ID
+        );
+        setReviewEligibility(latestEligibility);
+
+        if (!latestEligibility.eligible) {
+          alert(latestEligibility.reason);
+          return;
+        }
+
+        setModal("review");
+      }}
+      canReview={reviewEligibility.eligible}
+      reviewEligibilityMessage={reviewEligibility.reason}
+      onOpenPlan={() => (isLoggedIn ? setModal("plan") : setModal("register"))}
+      onSignInToReview={() => setModal("register")}
+      onEditReview={(review) => setEditingReview(review)}
       onDeleteReview={async (review) => {
         if (!window.confirm("Are you sure you want to delete your review?")) return;
         try {
           await deleteReviewFromSupabase(review);
-          setLiveReviews((prev) => ({
-            ...prev,
-            [dest.Destination_ID]: (prev[dest.Destination_ID] ?? []).filter(
-              (item) => item.Review_ID !== review.Review_ID
-            ),
-          }));
+          await loadReviewsFromSupabase();
           alert("Review deleted successfully!");
         } catch (error: any) {
           alert(error.message || "Failed to delete review.");
         }
       }}
-      Navbar={Navbar}
-      Modals={Modals}
-    />
+      onOpenDestination={(destination) => pickDest(destination)}
+      availableCountries={COUNTRIES}
+      availableCities={CITIES}
+      onSelectCountry={pickCountry}
+      onSelectCity={pickCity}
+      />
+      <Modals />
+    </>
+  );
+
+  if (screen === "destination") return (
+    <>
+      <Navbar />
+      <div className="min-h-[70vh] bg-[#f7f8fa] px-5 pt-28 pb-16">
+        <div className="mx-auto max-w-2xl rounded-3xl border border-slate-200 bg-white p-8 text-center shadow-sm">
+          <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-[#0b1f5c]/8 text-[#0b1f5c]">
+            <Icon name="location" size={22} />
+          </div>
+          <h1 className="mt-5 text-xl font-extrabold text-[#0b1f5c]">Destination details could not be loaded</h1>
+          <p className="mt-2 text-sm leading-6 text-slate-500">
+            We found the travel plan, but could not resolve all of the destination information.
+          </p>
+          <button
+            onClick={() => go("plans")}
+            className="mt-6 rounded-xl bg-[#0b1f5c] px-5 py-3 text-sm font-bold text-white hover:bg-[#162d7a]"
+          >
+            Back to My Trips
+          </button>
+        </div>
+      </div>
+    </>
   );
 
   // ── Travel Plans ──────────────────────────────────────────────────────────────
 
   if (screen === "plans") return (
-    <MyTripsScreen
-      plans={dbTravelPlans}
-      destinations={activeDestinations}
-      onBack={() => go("countries")}
-      onExplore={() => go("countries")}
-      onEdit={(plan) => setEditingPlan(plan)}
-      onDelete={async (plan) => {
+    <>
+      <Navbar />
+      <MyTripsScreen
+        plans={dbTravelPlans}
+        destinations={activeDestinations}
+        onBack={() => go("countries")}
+        onExplore={() => go("countries")}
+        onGenerateItinerary={() => setModal("itinerary")}
+        onEdit={(plan) => setEditingPlan(plan)}
+        onDelete={async (plan) => {
         const confirmed = window.confirm(
           `Are you sure you want to delete "${plan.plan_name}"?`
         );
@@ -2225,9 +2486,10 @@ const Modals = () => (
           alert(error.message || "Failed to delete travel plan.");
         }
       }}
-      onOpenDestination={(destination) => pickDest(destination)}
-      Modals={Modals}
-    />
+        onOpenDestination={(destination) => pickDest(destination)}
+      />
+      <Modals />
+    </>
   );
 
   if (screen === "partner-businesses") return (
@@ -2294,7 +2556,7 @@ const Modals = () => (
         );
         setPartnerData(savedPartner);
       }}
-      onDelete={async (business: BusinessPartner) => {
+      onDelete={async (business) => {
         if (!business.partnerId) {
           throw new Error("This business does not have a valid partner ID.");
         }

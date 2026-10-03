@@ -29,13 +29,7 @@ export default function PartnerDashboard({
   const [error, setError] = useState("");
   const [deleting, setDeleting] = useState(false);
 
-  const categories = [
-    "Restaurant",
-    "Accommodation",
-    "Convenience Store",
-    "Landmark",
-    "Tourist Destination",
-  ];
+  const categories = ["Restaurant", "Accommodation", "Convenience Store", "Landmark", "Tourist Destination"];
 
   const resetForm = () => {
     setBusinessName(partner.businessName);
@@ -48,38 +42,18 @@ export default function PartnerDashboard({
   };
 
   const handleSave = async () => {
-    if (
-      !businessName.trim() ||
-      !businessCategory ||
-      !contactPerson.trim() ||
-      !contactNumber.trim() ||
-      !email.trim() ||
-      !username.trim()
-    ) {
+    if (!businessName.trim() || !businessCategory || !contactPerson.trim() || !contactNumber.trim() || !email.trim() || !username.trim()) {
       setError("Please fill in all business information.");
       return;
     }
-
     if (!partner.partnerId) {
       setError("This business does not have a valid partner ID.");
       return;
     }
-
     setSaving(true);
     setError("");
-
     try {
-      const updatedPartner: BusinessPartner = {
-        ...partner,
-        businessName: businessName.trim(),
-        businessCategory,
-        contactPerson: contactPerson.trim(),
-        contactNumber: contactNumber.trim(),
-        email: email.trim(),
-        username: username.trim(),
-      };
-
-      await onUpdate(updatedPartner);
+      await onUpdate({ ...partner, businessName: businessName.trim(), businessCategory, contactPerson: contactPerson.trim(), contactNumber: contactNumber.trim(), email: email.trim(), username: username.trim() });
       setEditing(false);
     } catch (saveError: any) {
       console.error("Business update error:", saveError);
@@ -89,49 +63,44 @@ export default function PartnerDashboard({
     }
   };
 
-  const handleCancel = () => {
-    resetForm();
-    setEditing(false);
-  };
+  const handleCancel = () => { resetForm(); setEditing(false); };
+
+  const infoRows = [
+    { label: "Contact person", value: partner.contactPerson, icon: "user" as const },
+    { label: "Contact number", value: partner.contactNumber, icon: "phone" as const },
+    { label: "Email", value: partner.email, icon: "user" as const },
+    { label: "Username", value: partner.username, icon: "hash" as const },
+  ];
 
   return (
     <div className="min-h-screen bg-[#f7f8fa]">
       <Navbar />
-      <div className="pt-20 max-w-3xl mx-auto px-5 pb-16">
-        <button
-          onClick={onBack}
-          className="flex items-center gap-1.5 text-xs font-semibold text-slate-400 hover:text-[#0b1f5c] mb-5 transition-colors"
-        >
-          <Icon name="arrow-left" size={16} />
-          Back to My Businesses
+      <main className="pt-20 max-w-5xl mx-auto px-5 lg:px-7 pb-16">
+        <button onClick={onBack} className="inline-flex items-center gap-2 text-sm font-semibold text-slate-400 hover:text-[#0b1f5c] mb-5 transition-colors">
+          <Icon name="arrow-left" size={16} /> Back to My Businesses
         </button>
 
-        <div className="bg-white rounded-3xl border border-slate-100 overflow-hidden">
-          <div className="p-6 border-b border-slate-100">
-            <div className="flex items-start justify-between gap-4">
-              <div className="flex items-start gap-4 min-w-0">
-                <div className="w-14 h-14 rounded-2xl bg-[#0b1f5c] flex items-center justify-center text-2xl flex-shrink-0">
-                  <CategoryIcon type={partner.businessCategory as any} size={24} />
+        <section className="rounded-3xl bg-white border border-slate-100 overflow-hidden shadow-sm">
+          <div className="bg-[#0b1f5c] text-white p-6 sm:p-8 relative overflow-hidden">
+            <div className="absolute -right-12 -top-24 w-64 h-64 rounded-full bg-white/5" />
+            <div className="relative flex flex-col sm:flex-row sm:items-center justify-between gap-5">
+              <div className="flex items-center gap-4 min-w-0">
+                <div className="h-16 w-16 rounded-2xl bg-white/10 border border-white/15 flex items-center justify-center flex-shrink-0">
+                  <CategoryIcon type={partner.businessCategory as any} size={29} />
                 </div>
                 <div className="min-w-0">
-                  <h1
-                    className="text-2xl font-extrabold text-[#0b1f5c] truncate"
-                    style={{ fontFamily: "Outfit, sans-serif" }}
-                  >
-                    {partner.businessName}
-                  </h1>
-                  <p className="text-sm text-slate-500 mt-1">{partner.businessCategory}</p>
-                  <p className="text-xs text-slate-400 mt-1">
-                    Business Partner ID: {partner.partnerId}
-                  </p>
+                  <p className="text-xs uppercase tracking-[0.16em] font-bold text-blue-200">Business Partner</p>
+                  <h1 className="text-2xl sm:text-3xl font-extrabold mt-1 truncate" style={{ fontFamily: "Outfit, sans-serif" }}>{partner.businessName}</h1>
+                  <div className="flex flex-wrap items-center gap-2 mt-2">
+                    <span className="inline-flex items-center gap-1.5 rounded-full bg-white/10 border border-white/10 px-2.5 py-1 text-xs font-semibold text-blue-50">
+                      <CategoryIcon type={partner.businessCategory as any} size={13} /> {partner.businessCategory}
+                    </span>
+                    {partner.partnerId && <span className="text-xs text-blue-100/60">ID {partner.partnerId}</span>}
+                  </div>
                 </div>
               </div>
-
               {!editing && (
-                <button
-                  onClick={() => setEditing(true)}
-                  className="px-4 py-2.5 rounded-xl bg-[#0b1f5c] text-white text-sm font-semibold hover:bg-[#162d7a] transition-all whitespace-nowrap"
-                >
+                <button onClick={() => setEditing(true)} className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-white text-[#0b1f5c] text-sm font-extrabold hover:bg-slate-50 transition-all whitespace-nowrap">
                   <Icon name="edit" size={15} /> Edit Business
                 </button>
               )}
@@ -139,154 +108,91 @@ export default function PartnerDashboard({
           </div>
 
           {!editing ? (
-            <div className="p-6 space-y-3">
-              <h2 className="text-sm font-extrabold text-[#0b1f5c]">Business Information</h2>
-
-              {[
-                ["Business Name", partner.businessName],
-                ["Business Category", partner.businessCategory],
-                ["Contact Person", partner.contactPerson],
-                ["Contact Number", partner.contactNumber],
-                ["Email", partner.email],
-                ["Username", partner.username],
-                [
-                  "Registration Date",
-                  partner.registrationDate
-                    ? new Date(partner.registrationDate).toLocaleDateString()
-                    : "—",
-                ],
-              ].map(([label, value]) => (
-                <div
-                  key={label}
-                  className="flex items-start justify-between gap-6 py-3 border-b border-slate-100 last:border-b-0"
-                >
-                  <span className="text-[11px] uppercase tracking-wider font-semibold text-slate-400">
-                    {label}
-                  </span>
-                  <span className="text-sm font-semibold text-slate-700 text-right break-words">
-                    {value}
-                  </span>
+            <div className="p-6 sm:p-8">
+              <div className="flex items-end justify-between gap-4 mb-5">
+                <div>
+                  <p className="text-xs font-bold uppercase tracking-[0.16em] text-slate-400">Business profile</p>
+                  <h2 className="text-xl font-extrabold text-[#0b1f5c] mt-1" style={{ fontFamily: "Outfit, sans-serif" }}>Business information</h2>
                 </div>
-              ))}
+                {partner.registrationDate && <span className="text-xs font-semibold text-slate-400">Registered {new Date(partner.registrationDate).toLocaleDateString()}</span>}
+              </div>
 
-              <div className="flex flex-wrap gap-3 pt-4">
-                <button
-                  onClick={() => setEditing(true)}
-                  className="inline-flex items-center gap-2 rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-semibold text-slate-600 transition hover:bg-slate-50"
-                >
-                  <Icon name="edit" size={15} />
-                  Edit Business
+              <div className="grid sm:grid-cols-2 gap-3">
+                {infoRows.map((row) => (
+                  <div key={row.label} className="rounded-2xl bg-slate-50 border border-slate-100 p-4 flex items-start gap-3">
+                    <div className="h-9 w-9 rounded-xl bg-white text-[#0b1f5c] flex items-center justify-center border border-slate-100 flex-shrink-0">
+                      <Icon name={row.icon} size={16} />
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-[10px] uppercase tracking-wider font-bold text-slate-400">{row.label}</p>
+                      <p className="text-sm font-semibold text-slate-700 mt-1 break-words">{row.value || "—"}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <div className="mt-4 rounded-2xl border border-slate-100 p-4 flex items-center gap-3">
+                <div className="h-9 w-9 rounded-xl bg-[#0b1f5c]/5 text-[#0b1f5c] flex items-center justify-center flex-shrink-0"><Icon name="business" size={16} /></div>
+                <div>
+                  <p className="text-[10px] uppercase tracking-wider font-bold text-slate-400">Business name</p>
+                  <p className="text-sm font-semibold text-slate-700 mt-1">{partner.businessName}</p>
+                </div>
+              </div>
+
+              <div className="mt-7 flex flex-wrap gap-3">
+                <button onClick={() => setEditing(true)} className="inline-flex items-center gap-2 rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-bold text-slate-600 hover:bg-slate-50 transition">
+                  <Icon name="edit" size={15} /> Edit Business
                 </button>
                 <button
                   onClick={async () => {
-                    setDeleting(true);
-                    setError("");
-                    try {
-                      await onDelete(partner);
-                    } catch (deleteError: any) {
-                      console.error("Business delete error:", deleteError);
-                      setError(deleteError?.message || "Failed to delete the business.");
-                    } finally {
-                      setDeleting(false);
-                    }
+                    setDeleting(true); setError("");
+                    try { await onDelete(partner); }
+                    catch (deleteError: any) { console.error("Business delete error:", deleteError); setError(deleteError?.message || "Failed to delete the business."); }
+                    finally { setDeleting(false); }
                   }}
                   disabled={deleting}
-                  className="inline-flex items-center gap-2 rounded-xl border border-red-200 px-4 py-2.5 text-sm font-semibold text-red-600 transition hover:bg-red-50 disabled:opacity-50"
+                  className="inline-flex items-center gap-2 rounded-xl border border-red-200 px-4 py-2.5 text-sm font-bold text-red-600 hover:bg-red-50 transition disabled:opacity-50"
                 >
-                  <Icon name="trash" size={15} />
-                  {deleting ? "Deleting..." : "Delete Business"}
+                  <Icon name="trash" size={15} /> {deleting ? "Deleting..." : "Delete Business"}
                 </button>
               </div>
 
-              <div className="pt-4">
-                <div className="rounded-2xl bg-slate-50 border border-slate-100 p-4">
-                  <p className="text-xs font-semibold text-slate-500">Current business role</p>
-                  <p className="text-sm text-slate-600 mt-1">
-                    This Business Partner record represents one business. To manage another business,
-                    return to My Businesses and choose “+ Add Another Business”.
-                  </p>
-                </div>
+              {error && <p className="text-sm text-red-500 mt-4">{error}</p>}
+
+              <div className="mt-7 rounded-2xl bg-slate-50 border border-slate-100 p-4">
+                <p className="text-xs font-bold text-[#0b1f5c]">Managing multiple businesses?</p>
+                <p className="text-sm text-slate-500 mt-1 leading-relaxed">Return to My Businesses to switch between your registered establishments or add another business under the same authenticated account.</p>
               </div>
             </div>
           ) : (
-            <div className="p-6 space-y-4">
-              <h2 className="text-sm font-extrabold text-[#0b1f5c]">Edit Business</h2>
-
-              <Field
-                label="Business Name"
-                placeholder="e.g. Lio Beach Resort"
-                value={businessName}
-                onChange={(e: ChangeEvent<HTMLInputElement>) => setBusinessName(e.target.value)}
-              />
-
-              <div>
-                <label className="block text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-1">
-                  Business Category
-                </label>
-                <select
-                  value={businessCategory}
-                  onChange={(e: ChangeEvent<HTMLSelectElement>) => setBusinessCategory(e.target.value)}
-                  className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-100"
-                >
-                  {categories.map((category) => (
-                    <option key={category}>{category}</option>
-                  ))}
-                </select>
+            <div className="p-6 sm:p-8">
+              <div className="mb-5">
+                <p className="text-xs font-bold uppercase tracking-[0.16em] text-slate-400">Edit listing</p>
+                <h2 className="text-xl font-extrabold text-[#0b1f5c] mt-1" style={{ fontFamily: "Outfit, sans-serif" }}>Update business information</h2>
               </div>
-
-              <Field
-                label="Contact Person"
-                placeholder="Manager's full name"
-                value={contactPerson}
-                onChange={(e: ChangeEvent<HTMLInputElement>) => setContactPerson(e.target.value)}
-              />
-
-              <Field
-                label="Contact Number"
-                placeholder="+63 9XX XXX XXXX"
-                value={contactNumber}
-                onChange={(e: ChangeEvent<HTMLInputElement>) => setContactNumber(e.target.value)}
-              />
-
-              <Field
-                label="Email"
-                type="email"
-                placeholder="business@email.com"
-                value={email}
-                onChange={(e: ChangeEvent<HTMLInputElement>) => setEmail(e.target.value)}
-              />
-
-              <Field
-                label="Username"
-                placeholder="Business username"
-                value={username}
-                onChange={(e: ChangeEvent<HTMLInputElement>) => setUsername(e.target.value)}
-              />
-
-              {error && <p className="text-xs text-red-500">{error}</p>}
-
-              <div className="flex gap-3 pt-2">
-                <button
-                  onClick={handleCancel}
-                  disabled={saving}
-                  className="flex-1 border border-gray-200 text-slate-600 font-semibold py-2.5 rounded-xl hover:bg-gray-50 text-sm disabled:opacity-50"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={handleSave}
-                  disabled={saving}
-                  className="flex-1 bg-[#0b1f5c] text-white font-semibold py-2.5 rounded-xl hover:bg-[#162d7a] text-sm disabled:opacity-50"
-                >
-                  {saving ? "Saving..." : "Save Changes"}
-                </button>
+              <div className="grid sm:grid-cols-2 gap-4">
+                <div className="sm:col-span-2"><Field label="Business Name" placeholder="e.g. Lio Beach Resort" value={businessName} onChange={(e: ChangeEvent<HTMLInputElement>) => setBusinessName(e.target.value)} /></div>
+                <div className="sm:col-span-2">
+                  <label className="block text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-1">Business Category</label>
+                  <select value={businessCategory} onChange={(e: ChangeEvent<HTMLSelectElement>) => setBusinessCategory(e.target.value)} className="w-full border border-gray-200 rounded-xl px-3 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-100">
+                    {categories.map((category) => <option key={category}>{category}</option>)}
+                  </select>
+                </div>
+                <Field label="Contact Person" placeholder="Manager's full name" value={contactPerson} onChange={(e: ChangeEvent<HTMLInputElement>) => setContactPerson(e.target.value)} />
+                <Field label="Contact Number" placeholder="+63 9XX XXX XXXX" value={contactNumber} onChange={(e: ChangeEvent<HTMLInputElement>) => setContactNumber(e.target.value)} />
+                <Field label="Email" type="email" placeholder="business@email.com" value={email} onChange={(e: ChangeEvent<HTMLInputElement>) => setEmail(e.target.value)} />
+                <Field label="Username" placeholder="Business username" value={username} onChange={(e: ChangeEvent<HTMLInputElement>) => setUsername(e.target.value)} />
+              </div>
+              {error && <p className="text-sm text-red-500 mt-4">{error}</p>}
+              <div className="flex flex-col-reverse sm:flex-row gap-3 pt-6 mt-2 border-t border-slate-100">
+                <button onClick={handleCancel} disabled={saving} className="flex-1 border border-gray-200 text-slate-600 font-bold py-3 rounded-xl hover:bg-gray-50 text-sm disabled:opacity-50">Cancel</button>
+                <button onClick={handleSave} disabled={saving} className="flex-1 bg-[#0b1f5c] text-white font-bold py-3 rounded-xl hover:bg-[#162d7a] text-sm disabled:opacity-50">{saving ? "Saving..." : "Save Changes"}</button>
               </div>
             </div>
           )}
-        </div>
-      </div>
+        </section>
+      </main>
       <Modals />
     </div>
   );
 }
-

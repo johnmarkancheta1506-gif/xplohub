@@ -45,7 +45,7 @@ export default function RegisterModal({ onClose, onSwitch }: { onClose: () => vo
   };
 
   return (
-    <Overlay onClose={onClose}>
+    <Overlay onClose={onClose} contentClassName="max-w-lg">
       <ModalHeader title="Create Account" onClose={onClose} />
       <div className="px-6 pb-6 pt-3 space-y-3">
         {errorMsg && (

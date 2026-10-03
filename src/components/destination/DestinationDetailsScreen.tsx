@@ -214,7 +214,7 @@ export default function DestinationDetailsScreen({
                       return (
                         <article key={review.Review_ID} className="rounded-2xl border border-slate-100 p-5">
                           <div className="flex items-start gap-3">
-                            <UserAvatar src={review.reviewer_avatar} name={review.reviewer_name} size={42} />
+                            <UserAvatar avatarUrl={review.reviewer_avatar} name={review.reviewer_name} sizeClass="h-[42px] w-[42px]" />
                             <div className="min-w-0 flex-1">
                               <div className="flex flex-wrap items-center gap-2">
                                 <p className="text-sm font-bold text-[#0b1f5c]">{review.reviewer_name}</p>

@@ -3,6 +3,16 @@ import supabase from "../../config/supabaseClient";
 import Overlay from "../common/Overlay";
 import ModalHeader from "../common/ModalHeader";
 
+function getCalculatedEndDate(startDate: string, numberOfDays: string) {
+  if (!startDate || !numberOfDays || Number(numberOfDays) < 1) return "";
+
+  const date = new Date(`${startDate}T00:00:00`);
+  if (Number.isNaN(date.getTime())) return "";
+
+  date.setDate(date.getDate() + Number(numberOfDays) - 1);
+  return date.toISOString().slice(0, 10);
+}
+
 export default function EditTravelPlanModal({
   plan,
   onClose,
@@ -132,6 +142,24 @@ export default function EditTravelPlanModal({
             className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-100"
           />
         </div>
+
+        {status === "Completed" && (
+          <div className="rounded-xl border border-emerald-100 bg-emerald-50/70 p-3">
+            <label className="block text-xs font-semibold text-emerald-700 mb-1">
+              End Date
+            </label>
+            <input
+              type="date"
+              value={getCalculatedEndDate(startDate, numberOfDays)}
+              readOnly
+              aria-label="Calculated end date"
+              className="w-full cursor-not-allowed rounded-lg border border-emerald-100 bg-white px-3 py-2 text-sm font-semibold text-slate-700"
+            />
+            <p className="mt-1 text-[11px] text-emerald-700/70">
+              Calculated from the start date and number of days.
+            </p>
+          </div>
+        )}
 
         <div>
           <label className="block text-xs text-slate-400 mb-1">

@@ -41,3 +41,78 @@ h1, h2, h3, h4, h5 {
 html:hover ::-webkit-scrollbar-thumb {
   opacity: 1;
 }
+
+/* Global UI consistency */
+body {
+  font-size: 15px;
+}
+
+/* Keep compact labels readable across the application. */
+[class*="text-[10px]"] {
+  font-size: 0.75rem !important;
+  line-height: 1.35 !important;
+}
+
+[class*="text-[11px]"] {
+  font-size: 0.75rem !important;
+  line-height: 1.4 !important;
+}
+
+/* Slightly enlarge Tailwind's extra-small text so dense cards, metadata,
+   modal labels, and secondary actions remain comfortable to read. */
+.text-xs {
+  font-size: 0.8125rem !important;
+  line-height: 1.45 !important;
+}
+
+/* Consistent hover/focus feedback for interactive controls. */
+button:not(:disabled) {
+  transition-property: transform, box-shadow, background-color, border-color, color;
+  transition-duration: 160ms;
+  transition-timing-function: ease-out;
+}
+
+@media (hover: hover) {
+  button:not(:disabled):hover {
+    transform: translateY(-1px);
+  }
+}
+
+button:not(:disabled):focus-visible {
+  outline: 2px solid rgba(37, 99, 235, 0.35);
+  outline-offset: 2px;
+}
+
+
+/* Final responsive polish */
+img, svg {
+  max-width: 100%;
+}
+
+button, input, select, textarea {
+  -webkit-tap-highlight-color: transparent;
+}
+
+@media (max-width: 640px) {
+  input,
+  select,
+  textarea {
+    font-size: 16px !important;
+  }
+
+  /* Keep modal content inside the viewport on smaller screens. */
+  .modal-scroll-area {
+    max-height: calc(100vh - 5.5rem);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+  }
+}
